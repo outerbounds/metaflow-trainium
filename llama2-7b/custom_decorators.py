@@ -58,4 +58,5 @@ def enable_decorator(dec, flag):
         if flag:
             return dec(func)
         return func
+
     return decorator

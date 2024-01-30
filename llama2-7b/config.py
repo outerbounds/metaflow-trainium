@@ -27,7 +27,9 @@ class TokenizerStoreConfig:
 class ModelStoreConfig:
     local_weights_path: str = "model"
     local_checkpoints_path: str = "model/checkpoints"
-    s3_prefix: str = "llama2_7b/model/checkpoints"
+    s3_prefix: str = "llama2_7b/model"
+    s3_checkpoints_key: str = "checkpoints"
+    s3_experiments_key: str = "experiments"
 
 
 @dataclass
@@ -65,16 +67,17 @@ class TrainingConfig:
     use_zero_1: bool = True  # NOTE: 0 --> pure data parallelism, 1 --> ZeRO-1
     global_batch_size: int = 1024
     micro_batch_size: int = 1
-    total_steps: int = 3
-    warmup_steps: int = 1
     learning_rate: float = 3.0e-4
     sequence_length: int = 4096
     do_pre_compilation: bool = True
     pre_compilation_steps: int = 1
-    steps_this_run: int = 3
-    logging_interval: int = 1
+    warmup_steps: int = 1
+    steps_this_run: int = 2
+    total_steps: int = 2
+    logging_interval: int = 1  # TensorBoard & CLI
+    checkpoint_frequency: int = 1
     metrics_file: str = "metrics.json"
-    checkpoint_frequency: int = 3
+
 
 @dataclass
 class TrainiumLlama2PretrainConfig:
@@ -102,7 +105,9 @@ caching_env_config = {
 
 @dataclass
 class CachingEnvironmentConfig:
-    batch_enabled: bool = False # NOTE: @batch decorator is disabled by default. Turn this on to tokenize data remotely.
+    batch_enabled: bool = (
+        False  # NOTE: @batch decorator is disabled by default. Turn this on to tokenize data remotely.
+    )
     packages: Dict[str, str] = field(default_factory=lambda: caching_env_config)
 
 
@@ -156,7 +161,9 @@ class TrainLlama2EnvConfig:
     packages: Dict[str, str] = field(default_factory=lambda: training_env_config)
     env_vars: Dict[str, str] = field(default_factory=lambda: env_vars_config)
     batch_job: BatchJobConfig = field(default_factory=BatchJobConfig)
-    continue_from_checkpoint_instructions: str = "To continue from a checkpoint, specify the checkpoint name in the --checkpoint parameter."
+    continue_from_checkpoint_instructions: str = (
+        "To continue from a checkpoint, specify the checkpoint name in the --checkpoint parameter."
+    )
 
 
 @dataclass
