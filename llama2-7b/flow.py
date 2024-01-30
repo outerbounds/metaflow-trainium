@@ -154,35 +154,29 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         )
 
         # Upload checkpoint artifacts for use in continued pre-training or next stage (e.g., instruction tuning).
-        try:
-            model_store.upload(
-                local_path=checkpoint_dir,
-                store_key=os.path.join(
-                    self.config.model_store.s3_checkpoints_key, 
-                    current.parallel.node_index,
-                    current.run_id
-                )
+        model_store.upload(
+            local_path=checkpoint_dir,
+            store_key=os.path.join(
+                self.config.model_store.s3_checkpoints_key, 
+                current.parallel.node_index,
+                current.run_id
             )
-        except:
-            import time
-            print("Failed checkpoint upload sleeping 2 hrs")
-            time.sleep(2*3600)
+        )
 
         # Push TensorBoard logs to S3.
         experiment_logs = os.path.join(os.getcwd(), "outputs")
-        try:
-            model_store.upload(experiment_logs, store_key=current.run_id)
-            model_store.upload(
-                local_path=experiment_logs,
-                store_key=os.path.join(
-                    self.config.model_store.s3_experiments_key, 
-                    current.parallel.node_index,
-                    current.run_id
-                )
+        model_store.upload(experiment_logs, store_key=current.run_id)
+        model_store.upload(
+            local_path=experiment_logs,
+            store_key=os.path.join(
+                self.config.model_store.s3_experiments_key, 
+                current.parallel.node_index,
+                current.run_id
             )
-        except:
-            print("Failed experiment logs upload sleeping 2 hrs")
-            time.sleep(2*3600)
+        )
+        
+        # Store metrics file
+        self.metrics_json = json.load(open(metrics_file))
 
         self.next(self.join)
 

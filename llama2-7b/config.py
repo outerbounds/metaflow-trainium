@@ -71,11 +71,11 @@ class TrainingConfig:
     sequence_length: int = 4096
     do_pre_compilation: bool = True
     pre_compilation_steps: int = 1
-    warmup_steps: int = 1
-    steps_this_run: int = 2
-    total_steps: int = 2
+    warmup_steps: int = 10
+    steps_this_run: int = 100
+    total_steps: int = 100
     logging_interval: int = 1  # TensorBoard & CLI
-    checkpoint_frequency: int = 1
+    checkpoint_frequency: int = 25
     metrics_file: str = "metrics.json"
 
 
