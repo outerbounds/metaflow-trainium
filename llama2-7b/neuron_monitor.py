@@ -35,8 +35,6 @@ MONITOR_FIELDS = [
     "memory_total",
 ]
 
-# MONITOR = """nvidia-smi --query-gpu=pci.bus_id,timestamp,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits -l {interval};"""
-
 CONFIG_FILENAME = "monitor.conf"
 MONITOR = """neuron-monitor --config-file {}""".format(CONFIG_FILENAME)
 CONFIG_TEMPLATE = {
@@ -72,10 +70,6 @@ CONFIG_TEMPLATE = {
     }
   ]
 }
-
-# TODO: move this code
-# with open(CONFIG_FILENAME, "w") as f:
-#     f.write(CONFIG_TEMPLATE)
 
 ProcessUUID = namedtuple("ProcessUUID", ["uuid", "start_time", "end_time"])
 
