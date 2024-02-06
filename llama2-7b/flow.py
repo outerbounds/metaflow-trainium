@@ -10,6 +10,7 @@ from metaflow.plugins.parallel_decorator import UBF_CONTROL
 from config import ConfigBase, EnvironmentConfig, TrainiumLlama2PretrainConfig
 from ops import DataStore, TokenizerStore, ModelStore
 from custom_decorators import pip, enable_decorator
+from neuron_monitor import neuron_monitor
 
 environment_config = EnvironmentConfig()
 
@@ -58,51 +59,55 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
 
     @environment(vars=environment_config.train_llama2_step.env_vars)
     @batch(
-        # NOTE: Trainium and inferentia modify batch job submitted in the same way. 
-        # So, we can use the same `inferentia` arg for both for now.
-        # TODO: change Metaflow to say neuron here for either case.
         inferentia=environment_config.train_llama2_step.batch_job.n_trainium_devices,
         efa=environment_config.train_llama2_step.batch_job.n_efa_interfaces,
         cpu=environment_config.train_llama2_step.batch_job.n_cpu,
         memory=environment_config.train_llama2_step.batch_job.memory,
         image=environment_config.train_llama2_step.batch_job.image,
         queue=environment_config.train_llama2_step.batch_job.job_queue,
+        use_tmpfs=True, # size is 1/2 of `memory` by default.
     )
+    @neuron_monitor(interval=5)
     @torchrun
     @step
     def train_llama2(self):
         from omegaconf import OmegaConf
         import json
 
+        # Create model_store.local_weights_path directory relative to working directory.
+        # This is where model weights and config go, NOT the checkpoints.
+        def make_path(rel_path, make_dir=True, use_tmpfs=False):
+            if use_tmpfs:
+                path = os.path.join(current.tempdir, rel_path)
+            else:
+                path = os.path.join(os.getcwd(), rel_path)
+            if not os.path.exists(path) and make_dir:
+                os.makedirs(path)
+            return path
+
+        data_dir = make_path(self.config.data_store.local_path)
+        model_path = make_path(self.config.model_store.local_weights_path)
+        checkpoint_dir = make_path(self.config.model_store.local_checkpoints_path, use_tmpfs=True)
+        metrics_file = make_path(self.config.training.metrics_file, make_dir=False)
+
         # Download tokenized data.
         data_store = self._get_data_store()
-        data_store.download(download_path=self.config.data_store.local_path)
+        data_store.download(download_path=data_dir)
 
         # Download checkpoint from model_store.
         model_store = self._get_model_store()
         resume_checkpoint_arg = {}
         if self.remote_checkpoint_id is not None:
+            # Note: This downloads all checkpoints from the specified run_id.
             model_store.download(
-                download_path=self.config.model_store.local_checkpoints_path,
+                download_path=checkpoint_dir,
                 store_key=os.path.join(
                     self.config.model_store.s3_checkpoints_key, 
-                    current.parallel.node_index,
-                    self.remote_checkpoint_id
+                    self.remote_checkpoint_id,
+                    current.parallel.node_index
                 )
             )
-            resume_checkpoint_arg['resume_ckpt'] = None # NOTE: None tells current.torch.run to use store_true style command line arg
-
-        # Create model_store.local_weights_path directory relative to working directory.
-        # This is where model weights and config go, NOT the checkpoints.
-        def make_path(rel_path, make_dir=True):
-            path = os.path.join(os.getcwd(), rel_path)
-            if not os.path.exists(path) and make_dir:
-                os.makedirs(path)
-            return path
-        data_dir = make_path(self.config.data_store.local_path)
-        model_path = make_path(self.config.model_store.local_weights_path)
-        checkpoint_dir = make_path(self.config.model_store.local_checkpoints_path)
-        metrics_file = make_path(self.config.training.metrics_file, make_dir=False)
+            resume_checkpoint_arg['resume_ckpt'] = None # NOTE: value None tells current.torch.run to use store_true style command line arg
 
         # Write config.json used by transformers model. If desired, you could alternatively package a hard-coded config.json in the Docker image.
         model_arch_config = OmegaConf.to_container(self.config.model_architecture)
@@ -113,15 +118,14 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         world_size = (
             environment_config.train_llama2_step.batch_job.n_nodes 
             * environment_config.train_llama2_step.batch_job.n_trainium_devices 
-            * 2
+            * 2 # 2 cores per device
         )
         data_parallelism_degree = world_size / self.config.training.tensor_parallelism_degree
-        # accumulation_steps = int(
-        #     self.config.training.global_batch_size
-        #     / self.config.training.micro_batch_size
-        #     / data_parallelism_degree
-        # )
-        accumulation_steps = 1 # TESTING ~ only enter checkpointing logic if training_ustep % grad_accum_usteps == 0
+        accumulation_steps = int(
+            self.config.training.global_batch_size
+            / self.config.training.micro_batch_size
+            / data_parallelism_degree
+        )
         entrypoint_args = {
             "model_path": model_path, # TODO: rel path did not to work, so using abs path.  
             "data_dir": data_dir,
@@ -139,7 +143,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             **resume_checkpoint_arg,
             "checkpoint_dir": checkpoint_dir,
             "metrics_file": metrics_file,
-            # "force_checkpoint": None, # NOTE: Checkpoints every epoch no matter what, included for testing.
+            "force_checkpoint": None, # NOTE: Checkpoints every step no matter what, included for testing.
         }
         if self.config.training.use_mix_precision:
             entrypoint_args["use_mix_precision"] = None
@@ -158,25 +162,25 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             local_path=checkpoint_dir,
             store_key=os.path.join(
                 self.config.model_store.s3_checkpoints_key, 
-                current.parallel.node_index,
-                current.run_id
-            )
-        )
-
-        # Push TensorBoard logs to S3.
-        experiment_logs = os.path.join(os.getcwd(), "outputs")
-        model_store.upload(experiment_logs, store_key=current.run_id)
-        model_store.upload(
-            local_path=experiment_logs,
-            store_key=os.path.join(
-                self.config.model_store.s3_experiments_key, 
-                current.parallel.node_index,
-                current.run_id
+                current.run_id,
+                str(current.parallel.node_index)
             )
         )
         
-        # Store metrics file
-        self.metrics_json = json.load(open(metrics_file))
+        if current.parallel.node_index == 0:
+
+            # Push TensorBoard logs to S3.
+            experiment_logs = os.path.join(os.getcwd(), "output")
+            model_store.upload(
+                local_path=experiment_logs,
+                store_key=os.path.join(
+                    self.config.model_store.s3_experiments_key, 
+                    current.run_id
+                )
+            )
+            
+            # Store metrics file
+            self.metrics_json = json.load(open(metrics_file))
 
         self.next(self.join)
 

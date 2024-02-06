@@ -62,7 +62,7 @@ class ModelArchitectureConfig:
 
 @dataclass
 class TrainingConfig:
-    tensor_parallelism_degree: int = 8
+    tensor_parallelism_degree: int = 8 # NOTE: always keep this lower than num devices per node.
     use_mix_precision: bool = True
     use_zero_1: bool = True  # NOTE: 0 --> pure data parallelism, 1 --> ZeRO-1
     global_batch_size: int = 1024
@@ -71,11 +71,11 @@ class TrainingConfig:
     sequence_length: int = 4096
     do_pre_compilation: bool = True
     pre_compilation_steps: int = 1
-    warmup_steps: int = 10
-    steps_this_run: int = 100
-    total_steps: int = 100
-    logging_interval: int = 1  # TensorBoard & CLI
-    checkpoint_frequency: int = 25
+    warmup_steps: int = 2
+    steps_this_run: int = 2
+    total_steps: int = 2
+    logging_interval: int = 1  # affects TensorBoard & CLI
+    checkpoint_frequency: int = 1
     metrics_file: str = "metrics.json"
 
 
@@ -99,19 +99,17 @@ caching_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0",  # TODO: Why can't install omegaconf with @pypi?
+    "omegaconf": "2.3.0", 
 }
 
 
 @dataclass
 class CachingEnvironmentConfig:
-    batch_enabled: bool = (
-        False  # NOTE: @batch decorator is disabled by default. Turn this on to tokenize data remotely.
-    )
+    batch_enabled: bool = False # NOTE: Turn this on to tokenize data remotely.
     packages: Dict[str, str] = field(default_factory=lambda: caching_env_config)
 
 
-# Unused, baked in docker trainium:llama2 image
+# Unused, baked in training step docker image
 training_env_config = {
     "transformers": "4.31.0",
     "regex": "2023.12.25",
@@ -119,7 +117,7 @@ training_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0",  # TODO: Why can't install omegaconf with @pypi?
+    "omegaconf": "2.3.0", 
 }
 
 
