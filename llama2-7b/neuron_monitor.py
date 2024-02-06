@@ -88,7 +88,6 @@ def _get_uuid(time_duration=600):
 
 class AsyncProcessManager:
     """
-    This class is responsible for managing the nvidia SMI subprocesses
     This class is responsible for managing the neuron monitor subprocess
     """
 
