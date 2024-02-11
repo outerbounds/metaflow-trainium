@@ -67,7 +67,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         queue=environment_config.train_llama2_step.batch_job.job_queue,
         use_tmpfs=True, # size is 1/2 of `memory` by default.
     )
-    @neuron_monitor(interval=5)
+    @neuron_monitor(interval=1)
     @torchrun
     @step
     def train_llama2(self):
@@ -98,7 +98,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         model_store = self._get_model_store()
         resume_checkpoint_arg = {}
         if self.remote_checkpoint_id is not None:
-            # Note: This downloads all checkpoints from the specified run_id.
+            # NOTE: This downloads all checkpoints from the specified run_id.
             model_store.download(
                 download_path=checkpoint_dir,
                 store_key=os.path.join(
@@ -118,7 +118,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         world_size = (
             environment_config.train_llama2_step.batch_job.n_nodes 
             * environment_config.train_llama2_step.batch_job.n_trainium_devices 
-            * 2 # 2 cores per device
+            * 2 # cores per device
         )
         data_parallelism_degree = world_size / self.config.training.tensor_parallelism_degree
         accumulation_steps = int(
@@ -127,7 +127,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             / data_parallelism_degree
         )
         entrypoint_args = {
-            "model_path": model_path, # TODO: rel path did not to work, so using abs path.  
+            "model_path": model_path,  
             "data_dir": data_dir,
             "tensor_parallel_size": self.config.training.tensor_parallelism_degree,
             "batch_size": self.config.training.micro_batch_size,
@@ -143,7 +143,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             **resume_checkpoint_arg,
             "checkpoint_dir": checkpoint_dir,
             "metrics_file": metrics_file,
-            "force_checkpoint": None, # NOTE: Checkpoints every step no matter what, included for testing.
+            # "force_checkpoint": None, # NOTE: Checkpoints every step no matter what, included for testing.
         }
         if self.config.training.use_mix_precision:
             entrypoint_args["use_mix_precision"] = None
@@ -157,7 +157,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             master_port="41000" # NOTE: 41000 is hardcoded in reserved ports in the Dockerfile.
         )
 
-        # Upload checkpoint artifacts for use in continued pre-training or next stage (e.g., instruction tuning).
+        # Push checkpoints for use in continued pre-training or next stage (e.g., instruction tuning).
         model_store.upload(
             local_path=checkpoint_dir,
             store_key=os.path.join(
@@ -179,7 +179,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
                 )
             )
             
-            # Store metrics file
+            # Store metrics file.
             self.metrics_json = json.load(open(metrics_file))
 
         self.next(self.join)

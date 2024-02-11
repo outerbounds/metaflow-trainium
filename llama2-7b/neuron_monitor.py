@@ -12,21 +12,18 @@ import os
 import uuid
 import json
 import sys
+import select
 from tempfile import TemporaryFile, TemporaryDirectory
-from subprocess import check_output, Popen
+from subprocess import check_output, Popen, PIPE
 from datetime import datetime, timedelta
 from functools import wraps
 from collections import namedtuple
 
 # Card plot styles
 MEM_COLOR = "#0c64d6"
-GPU_COLOR = "#ff69b4"
+NEURON_COLOR = "#ff69b4"
 
 TS_FORMAT = "%Y/%m/%d %H:%M:%S"
-
-
-DRIVER_VER = re.compile(b"Driver Version: (.+?) ")
-CUDA_VER = re.compile(b"CUDA Version:(.*) ")
 
 MONITOR_FIELDS = [
     "timestamp",
@@ -197,10 +194,14 @@ class NeuronMonitor:
 
     def create_new_monitor(self):
         uuid = _get_uuid(self._duration)
-        file = open(self.get_file_name(uuid.uuid), "w")
-        cmd = MONITOR #.format(interval=self._interval, time_duration=self._duration)
+        # file = open(self.get_file_name(uuid.uuid), "w")
+        file = PIPE
+        cmd = MONITOR
         AsyncProcessManager.spawn(uuid.uuid, ["bash", "-c", cmd], file)
         self._started_processes.append(uuid)
+        self._poller = select.poll()
+        proc = AsyncProcessManager.get(uuid.uuid)[0]
+        self._poller.register(proc.stdout, select.POLLIN)
         self._current_process = uuid
         return uuid
 
@@ -224,54 +225,42 @@ class NeuronMonitor:
         """
         Reads the monitor file and returns the readings in a dictionary format
         """
-        all_readings = []
-        if self._current_file is None:
-            return None
+        devdata = {
+            # <device_id>: {
+            #     "neuron_utilization": [],
+            #     "memory_used": [],
+            #     "memory_total": [],
+            #     "timestamp": []
+            # }
+        }
 
-        # Extract everything from the log File and store it in a list of dictionaries
-        # all_fields = ["neuron_id"] + MONITOR_FIELDS
-        with open(self._current_file, "r") as _monitor_out:
-            for line in _monitor_out.readlines():
-                data = json.loads(line)
-                if len(data.keys()) == 4: # TODO: hard-coding magic number for now, based on neuron-monitor docs.
-                    all_readings.append(data)
-                else:
-                    # expect that the last line may be truncated
-                    break
-
-        # Extract 'neuron_utilization' from the readings, organized by device_id
-        devdata = {}
-        for reading in all_readings:
-            reading["timestamp"] = datetime.now().strftime(TS_FORMAT)
-            if len(reading['neuron_runtime_data']) > 0:
-            
-                report = reading['neuron_runtime_data'][0]['report']
-                for device_id in report['neuroncore_counters']['neuroncores_in_use'].keys():
-                    if device_id not in devdata:
-                        devdata[device_id] = {}
-
-                        field = 'neuron_utilization'
-                        if field not in devdata[device_id]:
-                            devdata[device_id][field] = []
-                        devdata[device_id][field].append(report['neuroncore_counters']['neuroncores_in_use'][device_id]['neuroncore_utilization'])
-
-                        field = 'memory_used'
-                        if field not in devdata[device_id]:
-                            devdata[device_id][field] = []
-                        neuroncore_memory_usage = report['memory_used']['neuron_runtime_used_bytes']['usage_breakdown']['neuroncore_memory_usage'][device_id]
-                        devdata[device_id][field].append(sum(neuroncore_memory_usage.values()))
-
-                        field = 'memory_total'
-                        if field not in devdata[device_id]:
-                            devdata[device_id][field] = [] 
-                        # Each device has 32GB of memory, but the neuron monitor reports memory for each core. 
-                        # Assuming 2 cores per device, we compute a total memory for each core.
-                        devdata[device_id][field].append(32 / 2 * 1024 * 1024 * 1024) 
-                            
-                        field = 'timestamp'
-                        if field not in devdata[device_id]:
-                            devdata[device_id][field] = []
-                        devdata[device_id]["timestamp"].append(reading["timestamp"])
+        if self._poller.poll(1):
+            proc = AsyncProcessManager.get(self._current_process.uuid)[0]
+            line = proc.stdout.readline()
+            jtmp = json.loads(line.decode())
+            time = datetime.now().strftime(TS_FORMAT)
+            vals = {}
+            for rt_data in jtmp['neuron_runtime_data']:
+                # core utilization
+                d = rt_data['report']['neuroncore_counters']['neuroncores_in_use']
+                for k in d.keys():
+                    vals[k] = vals.get(k, 0) + d[k]['neuroncore_utilization']
+                    if k not in devdata:
+                        devdata[k] = {
+                            "neuron_utilization": [],
+                            "memory_used": [],
+                            "memory_total": [],
+                            "timestamp": []
+                        }
+                    devdata[k]["neuron_utilization"].append(vals[k])
+                # memory utilization
+                d = rt_data['report']['memory_used']['neuron_runtime_used_bytes']['usage_breakdown']['neuroncore_memory_usage']
+                for k in d.keys():
+                    devdata[k]["memory_used"].append(sum(d[k].values()))
+                    devdata[k]["memory_total"].append(32 / 2 * 1024 * 1024 * 1024) # NOTE: assumes 32GB memory per device.
+                # metadata
+                for k in d.keys():
+                    devdata[k]["timestamp"].append(time)
 
         return devdata
 
@@ -283,8 +272,8 @@ class NeuronMonitor:
         if self.current_process_has_ended() or not self.current_process_is_running():
             self._update_past_readings()
             self.clear_current_monitor()
-            self.create_new_monitor()
-            # Sleep for 1 seconds to allow the new process to start and we can make a reading
+            uuid = self.create_new_monitor()
+            # Sleep for 1 second to allow the new process to start and we can make a reading
             time.sleep(1)
 
         readings = self._read_monitor()
@@ -294,6 +283,7 @@ class NeuronMonitor:
 
     @staticmethod
     def _make_full_reading(current, past):
+        device_id = "0"
         if current is None:
             return past
         for device_id in current:
@@ -311,11 +301,16 @@ class NeuronMonitor:
         )
 
     def read_hardware_info(self):
-        with open(self._current_file, "r") as _monitor_out:
-            for line in _monitor_out.readlines():
-                data = json.loads(line)
-                if "neuron_hardware_info" in data:
-                    return data["neuron_hardware_info"]
+        """
+        Will read the hardware info from the monitor and return it as a dictionary.
+        This will run before meaningful data is available from the monitor readings.
+        """
+        proc = AsyncProcessManager.get(self._current_process.uuid)[0]
+        if self._poller.poll(1):
+            line = proc.stdout.readline()
+            data = json.loads(line)
+            if "neuron_hardware_info" in data:
+                return data["neuron_hardware_info"]
 
     def _update_past_readings(self):
         if self._current_readings is None:
@@ -378,11 +373,11 @@ def _update_charts(results, md_dict):
 
 # This code is adapted from: https://github.com/outerbounds/monitorbench
 class NeuronProfiler:
-    def __init__(self, interval=1, monitor_batch_duration=200):
+    def __init__(self, interval=1, monitor_batch_duration=10):
         self.error = False
         self._monitor = NeuronMonitor(interval=interval, duration=monitor_batch_duration)
         self._monitor_thread = threading.Thread(
-            target=self._monitor._monitor_update_thread, daemon=True
+            target=self._monitor._monitor_update_thread, # daemon=True
         )
         self._monitor_thread.start()
         self._interval = interval 
@@ -466,7 +461,6 @@ class NeuronProfiler:
 
         def _plots():
             els.append(Markdown("## Neuron core utilization and memory usage over time"))
-
             rows = {}
             for device_id in results["devices"]:
                 neuron_plot, mem_plot, ts_range = profile_plots(
@@ -496,6 +490,7 @@ class NeuronProfiler:
 
 
 class neuron_monitor:
+
     def __init__(
         self,
         include_artifacts=True,
@@ -607,7 +602,7 @@ def profile_plots(device_id, ts, neuron, mem_used, mem_total):
         "Neuron core utilization",
         "Neuron core utilization",
         "device: %s" % device_id,
-        line_color=GPU_COLOR,
+        line_color=NEURON_COLOR,
         percentage_format=True,
     )
     mem_plot = translate_to_vegalite(
