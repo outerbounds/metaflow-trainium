@@ -1,8 +1,6 @@
 import os
 import sys
 import json
-from multiprocessing import Pool, TimeoutError
-from tempfile import NamedTemporaryFile
 
 from metaflow import FlowSpec, step, batch, torchrun, current, S3, environment, Parameter, card
 from metaflow.plugins.parallel_decorator import UBF_CONTROL
