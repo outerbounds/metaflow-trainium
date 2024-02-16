@@ -34,7 +34,7 @@ class ModelStoreConfig:
 
 @dataclass
 class TrainingConfig:
-    bf16: bool = True
+    bf16: bool = False
     learning_rate: float = 5e-5
     per_device_train_batch_size: int = 1
     gradient_checkpointing: bool = True
@@ -75,11 +75,9 @@ class CachingEnvironmentConfig:
 
 # for @step tune_llama2 in flow.py
 training_env_config = {
-    # "optimum[neuron]": "1.16.2",
-    "git+https://github.com/huggingface/optimum-neuron.git": "",
-    # "transformers": "4.31.0",
+    "transformers": "4.31.0",
     "regex": "2023.12.25",
-    # "tensorboard": "2.15.1",
+    "tensorboard": "2.15.1",
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
@@ -87,26 +85,43 @@ training_env_config = {
 }
 
 
-# Derived from: https://github.com/aws-neuron/neuronx-distributed/blob/main/examples/training/llama2/tp_zero1_llama2_7b_hf_pretrain/tp_zero1_llama2_7b_hf_pretrain.sh
-NUM_RT_NEURON_CORES = 32  # trn1.32xlarge instance property.
 env_vars_config = {
-    "FI_EFA_USE_DEVICE_RDMA": "1",
-    "FI_PROVIDER": "efa",
-    "FI_EFA_FORK_SAFE": "1",
-    "CCOM_SOCKET_IFNAME": "eth0",
-    "MALLOC_ARENA_MAX": "64",  # host OOM
+    "NCCL_DEBUG": "INFO",
+    "NCCL_SOCKET_IFNAME": "eth0"
 }
 
 
+
+# p3dn.24xlarge
 @dataclass
 class BatchJobConfig:
     n_nodes: int = 1
-    n_trainium_devices: int = 16
-    n_cpu: int = 96
+    n_gpu: int = 8       
+    n_cpu: int = 96    
     memory: int = 500000
-    n_efa_interfaces: int = 8
-    image: str = "public.ecr.aws/outerbounds/trainium:llama2"
-    job_queue: str = "oleg2-mztdpcvj-efa"
+    image: str = "public.ecr.aws/outerbounds/transformers:latest"
+    job_queue: str = "v100-32gb"
+    shared_memory: int = 2000
+
+# g5.48xlarge --> OOM 
+# @dataclass
+# class BatchJobConfig:
+#     n_nodes: int = 1
+#     n_gpu: int = 8       
+#     n_cpu: int = 96    
+#     memory: int = 500000
+#     image: str = "public.ecr.aws/outerbounds/transformers:latest"
+#     job_queue: str = "a10g"
+#     shared_memory: int = 2000
+
+# p3.16xlarge --> too small
+# class BatchJobConfig:
+#     n_nodes: int = 1
+#     n_gpu: int = 8 
+#     n_cpu: int = 64     
+#     memory: int = 400000
+#     image: str = "public.ecr.aws/p7g1e3j4/deepspeed:6"
+#     job_queue: str = "oleg2-mztdpcvj-gpu"
 
 
 @dataclass

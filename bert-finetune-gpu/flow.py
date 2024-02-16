@@ -5,7 +5,7 @@ import sys
 from config import ConfigBase, EnvironmentConfig, TrainiumLlama2FinetuneConfig
 from ops import DataStore, TokenizerStore, ModelStore
 from custom_decorators import pip, enable_decorator
-# from neuron_monitor import neuron_monitor
+# from gpu_monitor import gpu_monitor
 
 environment_config = EnvironmentConfig()
 
@@ -53,13 +53,14 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
     @pip(packages={**environment_config.tune_llama2_step.packages})
     @environment(vars=environment_config.tune_llama2_step.env_vars)
     @batch(
-        inferentia=environment_config.tune_llama2_step.batch_job.n_trainium_devices,
-        efa=environment_config.tune_llama2_step.batch_job.n_efa_interfaces,
+        gpu=environment_config.tune_llama2_step.batch_job.n_gpu,
+        # efa=environment_config.tune_llama2_step.batch_job.n_efa_interfaces,
         cpu=environment_config.tune_llama2_step.batch_job.n_cpu,
         memory=environment_config.tune_llama2_step.batch_job.memory,
         image=environment_config.tune_llama2_step.batch_job.image,
         queue=environment_config.tune_llama2_step.batch_job.job_queue,
         use_tmpfs=True, # size is 1/2 of `memory` by default.
+        shared_memory=environment_config.tune_llama2_step.batch_job.shared_memory,
     )
     @torchrun
     @step
@@ -88,6 +89,7 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
         entrypoint_args = {
             "model_id": self.config.model_store.hf_model_name,
             "dataset_path": data_dir,
+            "pretrained_model_cache": os.path.join(current.tempdir, "pretrained_model_cache"),
             "bf16": self.config.training.bf16,
             "learning_rate": self.config.training.learning_rate,
             "output_dir": checkpoint_dir,
@@ -102,7 +104,12 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
         }
 
         # Train the model.
-        current.torch.run(entrypoint="run_clm.py", entrypoint_args=entrypoint_args, master_port="41000")
+        # current.torch.run(entrypoint="run_clm.py", entrypoint_args=entrypoint_args, master_port="41000")
+
+        print("sleeping...")
+
+        import time
+        time.sleep(3600 * 2)
 
         self.next(self.join)
 
