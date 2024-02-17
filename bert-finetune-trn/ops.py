@@ -13,6 +13,7 @@ from config import DataStoreConfig, TokenizerStoreConfig, ModelStoreConfig
 remainder = {"input_ids": [], "attention_mask": [], "token_type_ids": []}
 
 
+
 LLAMA_2_TOKENIZER_DOWNLOAD_INSTRUCTIONS = """To continue, you must download the Llama2 Tokenizer.
 Pull the tokenizer from HuggingFace, after being granted access by Meta. 
 Detailed instructions for acquiring the tokenizer are available [here](https://huggingface.co/meta-llama/Llama-2-7b). 
@@ -125,14 +126,10 @@ class DataStore(BaseStore):
 
     def format_dolly(self, sample):
         instruction = f"### Instruction\n{sample['instruction']}"
-        context = (
-            f"### Context\n{sample['context']}" if len(sample["context"]) > 0 else None
-        )
+        context = f"### Context\n{sample['context']}" if len(sample["context"]) > 0 else None
         response = f"### Answer\n{sample['response']}"
         # join all the parts together
-        prompt = "\n\n".join(
-            [i for i in [instruction, context, response] if i is not None]
-        )
+        prompt = "\n\n".join([i for i in [instruction, context, response] if i is not None])
         return prompt
 
     # empty list to save remainder from batches to use in next batch
@@ -147,10 +144,7 @@ class DataStore(BaseStore):
             global remainder
             # Concatenate all texts and add remainder from previous batch
             concatenated_examples = {k: list(chain(*sample[k])) for k in sample.keys()}
-            concatenated_examples = {
-                k: remainder[k] + concatenated_examples[k]
-                for k in concatenated_examples.keys()
-            }
+            concatenated_examples = {k: remainder[k] + concatenated_examples[k] for k in concatenated_examples.keys()}
             # get total number of tokens for batch
             batch_total_length = len(concatenated_examples[list(sample.keys())[0]])
 
@@ -160,17 +154,11 @@ class DataStore(BaseStore):
 
             # Split by chunks of max_len.
             result = {
-                k: [
-                    t[i : i + chunk_length]
-                    for i in range(0, batch_chunk_length, chunk_length)
-                ]
+                k: [t[i : i + chunk_length] for i in range(0, batch_chunk_length, chunk_length)]
                 for k, t in concatenated_examples.items()
             }
             # add remainder to global variable for next batch
-            remainder = {
-                k: concatenated_examples[k][batch_chunk_length:]
-                for k in concatenated_examples.keys()
-            }
+            remainder = {k: concatenated_examples[k][batch_chunk_length:] for k in concatenated_examples.keys()}
             # prepare labels
             result["labels"] = result["input_ids"].copy()
             return result
@@ -184,7 +172,9 @@ class DataStore(BaseStore):
         return lm_dataset
 
     def download_from_huggingface(
-        self, store_config: DataStoreConfig, tokenizer_local_path: str
+        self, 
+        store_config: DataStoreConfig,
+        tokenizer_local_path: str
     ):
         "https://github.com/aws-neuron/neuronx-distributed/blob/main/examples/training/llama2/get_dataset.py"
 
@@ -194,7 +184,8 @@ class DataStore(BaseStore):
 
         # Load dataset from the hub
         dataset = load_dataset(
-            store_config.hf_dataset_name, split=store_config.hf_dataset_split
+            store_config.hf_dataset_name, 
+            split=store_config.hf_dataset_split
         )
         # print(f"dataset size: {len(dataset)}")
         # print(dataset[randrange(len(dataset))])
@@ -207,7 +198,8 @@ class DataStore(BaseStore):
             os.makedirs(self.local_save_path)
 
         self.tokenizer_path = os.path.join(
-            os.path.abspath(os.path.expanduser(os.getcwd())), tokenizer_local_path
+            os.path.abspath(os.path.expanduser(os.getcwd())),
+            tokenizer_local_path
         )
         tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
 
@@ -223,15 +215,13 @@ class DataStore(BaseStore):
 
         # tokenize dataset
         dataset = dataset.map(
-            lambda sample: tokenizer(sample["text"]),
-            batched=True,
-            remove_columns=list(dataset.features),
+            lambda sample: tokenizer(sample["text"]), 
+            batched=True, 
+            remove_columns=list(dataset.features)
         )
 
         # chunk dataset
-        lm_dataset = self.pack_dataset(
-            dataset, chunk_length=2048
-        )  # We use 2048 as the maximum length for packing
+        lm_dataset = self.pack_dataset(dataset, chunk_length=2048) # We use 2048 as the maximum length for packing
         lm_dataset.save_to_disk(self.local_save_path)
 
 

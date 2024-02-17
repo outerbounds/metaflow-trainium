@@ -1,7 +1,5 @@
 FROM nvidia/cuda:12.1.0-base-ubuntu22.04
 
-20.04
-
 # System packages.
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -30,4 +28,4 @@ RUN micromamba create -y -n base && \
     micromamba shell init --shell=bash --prefix="$MAMBA_ROOT_PREFIX"
 RUN micromamba install python=3.11 pip -c conda-forge -y && python -m pip install --upgrade pip
 
-RUN python -m pip install torch 'transformers[torch]' datasets accelerate peft bitsandbytes
+RUN python -m pip install torch 'transformers[torch]' datasets accelerate

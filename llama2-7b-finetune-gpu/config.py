@@ -34,24 +34,35 @@ class ModelStoreConfig:
 
 @dataclass
 class TrainingConfig:
-    bf16: bool = False
+    bf16: bool = True
     learning_rate: float = 5e-5
-    per_device_train_batch_size: int = 1
+    per_device_train_batch_size: int = 4
     gradient_checkpointing: bool = True
-    tensor_parallel_size: int = 8
-    num_train_epochs: int = 3
-    logging_steps: int = 10
-    gradient_accumulation_steps: int = 16
-    skip_cache_push: bool = True
+    num_train_epochs: int = 1
+    logging_steps: int = 1
+    gradient_accumulation_steps: int = 4
     overwrite_output_dir: bool = True
 
 
 @dataclass
-class TrainiumLlama2FinetuneConfig:
+class ZeROConfig:
+    stage: int = 2
+    offload_optimizer: dict = field(default_factory=lambda: {"device": "cpu"})
+
+
+@dataclass
+class DeepspeedConfig:
+    train_micro_batch_size_per_gpu: int = 4
+    zero_optimization: ZeROConfig = field(default_factory=ZeROConfig)
+
+
+@dataclass
+class Llama2FinetuneConfig:
     data_store: DataStoreConfig = field(default_factory=DataStoreConfig)
     tokenizer_store: TokenizerStoreConfig = field(default_factory=TokenizerStoreConfig)
     model_store: ModelStoreConfig = field(default_factory=ModelStoreConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
+    deepspeed: DeepspeedConfig = field(default_factory=DeepspeedConfig)
 
 
 ### ENVIRONMENT ###
@@ -63,13 +74,13 @@ caching_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0", 
+    "omegaconf": "2.3.0",
 }
 
 
 @dataclass
 class CachingEnvironmentConfig:
-    batch_enabled: bool = False # NOTE: Turn this on to tokenize data remotely.
+    batch_enabled: bool = False  # NOTE: Turn this on to tokenize data remotely.
     packages: Dict[str, str] = field(default_factory=lambda: caching_env_config)
 
 
@@ -81,42 +92,52 @@ training_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0", 
+    "omegaconf": "2.3.0",
 }
 
 
 env_vars_config = {
-    "NCCL_DEBUG": "INFO",
-    "NCCL_SOCKET_IFNAME": "eth0"
+    # "NCCL_DEBUG": "INFO",
+    # "NCCL_SOCKET_IFNAME": "eth0"
 }
 
-# p3dn.24xlarge
+
+# Local A100 run (not available on AWS)
 @dataclass
 class BatchJobConfig:
     n_nodes: int = 1
-    n_gpu: int = 4      
-    n_cpu: int = 48    
-    memory: int = 250000
-    image: str = "public.ecr.aws/outerbounds/transformers:latest"
-    job_queue: str = "v100-32gb"
-    shared_memory: int = 2000
+    n_gpu: int = 8
+    n_cpu: int = 48
+    memory: int = 500000
 
-# g5.48xlarge --> OOM 
+
+# p3dn.24xlarge --> might be ok with batch size 1-2, needs further testing.
 # @dataclass
 # class BatchJobConfig:
 #     n_nodes: int = 1
-#     n_gpu: int = 8       
-#     n_cpu: int = 96    
+#     n_gpu: int = 8
+#     n_cpu: int = 48
+#     memory: int = 250000
+#     image: str = "public.ecr.aws/outerbounds/transformers:latest"
+#     job_queue: str = "v100-32gb"
+#     shared_memory: int = 2000
+
+# g5.48xlarge --> OOM. needs too much ZeRO tricks to work, too slow to top competitor in the study.
+# @dataclass
+# class BatchJobConfig:
+#     n_nodes: int = 1
+#     n_gpu: int = 8
+#     n_cpu: int = 96
 #     memory: int = 500000
 #     image: str = "public.ecr.aws/outerbounds/transformers:latest"
 #     job_queue: str = "a10g"
 #     shared_memory: int = 2000
 
-# p3.16xlarge --> too small
+# p3.16xlarge --> needs too much ZeRO tricks to work, too slow to top competitor in the study.
 # class BatchJobConfig:
 #     n_nodes: int = 1
-#     n_gpu: int = 8 
-#     n_cpu: int = 64     
+#     n_gpu: int = 8
+#     n_cpu: int = 64
 #     memory: int = 400000
 #     image: str = "public.ecr.aws/p7g1e3j4/deepspeed:6"
 #     job_queue: str = "oleg2-mztdpcvj-gpu"
@@ -134,9 +155,7 @@ class EnvironmentConfig:
     dataset_cache_step: CachingEnvironmentConfig = field(
         default_factory=CachingEnvironmentConfig
     )
-    tune_llama2_step: TuneLlama2EnvConfig = field(
-        default_factory=TuneLlama2EnvConfig
-    )
+    tune_llama2_step: TuneLlama2EnvConfig = field(default_factory=TuneLlama2EnvConfig)
 
 
 ### CONFIG HELPERS ###
@@ -190,9 +209,9 @@ class ConfigBase:
     Usage Example:
     --------
     ```
-    _CORE_CONFIG_CLASS = TrainiumLlama2FinetuneConfig
+    _CORE_CONFIG_CLASS = Llama2FinetuneConfig
     @property
-    def config(self) -> TrainiumLlama2FinetuneConfig:
+    def config(self) -> Llama2FinetuneConfig:
         return self._get_config()
     ```
     """
@@ -252,4 +271,4 @@ if __name__ == "__main__":
         ).upper()[0]
         if user_input != "Y":
             sys.exit("Exiting...")
-    create_config("config.yaml", TrainiumLlama2FinetuneConfig)
+    create_config("config.yaml", Llama2FinetuneConfig)

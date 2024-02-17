@@ -8,56 +8,30 @@ from transformers import (
     set_seed,
     HfArgumentParser,
     Trainer,
-    TrainingArguments
+    TrainingArguments,
 )
-
-# from optimum.neuron import NeuronHfArgumentParser as HfArgumentParser
-# from optimum.neuron import NeuronTrainer as Trainer
-# from optimum.neuron import NeuronTrainingArguments as TrainingArguments
-# from optimum.neuron.distributed import lazy_load_for_parallelism
 
 
 def training_function(script_args, training_args):
-    # load dataset
     dataset = load_from_disk(script_args.dataset_path)
-
-    # load model from the hub with a bnb config
     tokenizer = AutoTokenizer.from_pretrained(script_args.model_id)
     model = AutoModelForCausalLM.from_pretrained(
         script_args.model_id,
         torch_dtype="auto",
         low_cpu_mem_usage=True,
         cache_dir=script_args.pretrained_model_cache,
-        # use_cache=False if training_args.gradient_checkpointing else True,
+        use_cache=False if training_args.gradient_checkpointing else True,
     )
-
-    # Create Trainer instance
     trainer = Trainer(
         model=model,
         tokenizer=tokenizer,
         args=training_args,
         train_dataset=dataset,
-        data_collator=default_data_collator,  # no special collator needed since we stacked the dataset
+        data_collator=default_data_collator,
     )
 
-    # Start training
     trainer.train()
-
-    trainer.save_model()  # Saves the tokenizer too for easy upload
-
-    # Consolidate sharded checkpoint files to single file when TP degree > 1
-    # perrysc@amazon.com
-    # if (int(os.environ.get("RANK", -1)) == 0) and int(training_args.tensor_parallel_size) > 1:
-    #     print("Converting sharded checkpoint to consolidated format")
-    #     from optimum.neuron.distributed.checkpointing import (
-    #         consolidate_tensor_parallel_checkpoints_to_unified_checkpoint,
-    #     )
-    #     from shutil import rmtree
-
-    #     consolidate_tensor_parallel_checkpoints_to_unified_checkpoint(
-    #         training_args.output_dir, training_args.output_dir, "pytorch"
-    #     )
-    #     rmtree(os.path.join(training_args.output_dir, "tensor_parallel_shards"))  # remove sharded checkpoint files
+    trainer.save_model()
 
 
 @dataclass
@@ -66,26 +40,22 @@ class ScriptArguments:
         metadata={
             "help": "The model that you want to train from the Hugging Face hub. E.g. gpt2, gpt2-xl, bert, etc."
         },
-        default="philschmid/Llama-2-7b-hf"
+        default="philschmid/Llama-2-7b-hf",
     )
     dataset_path: str = field(
         metadata={"help": "Path to the preprocessed and tokenized dataset."},
-        default="data/databricks-dolly-15k"
+        default="data/databricks-dolly-15k",
     )
     pretrained_model_cache: str = field(
         metadata={"help": "Path to the preprocessed and tokenized dataset."},
-        default="/metaflow_temp/pretrained_model_cache"
+        default="/metaflow_temp/pretrained_model_cache",
     )
 
 
 def main():
     parser = HfArgumentParser([ScriptArguments, TrainingArguments])
     script_args, training_args = parser.parse_args_into_dataclasses()
-
-    # set seed
     set_seed(training_args.seed)
-
-    # run training function
     training_function(script_args, training_args)
 
 
