@@ -20,7 +20,9 @@ def training_function(script_args, training_args):
 
     # load model from the hub with a bnb config
     tokenizer = AutoTokenizer.from_pretrained(script_args.model_id)
-    with lazy_load_for_parallelism(tensor_parallel_size=training_args.tensor_parallel_size):
+    with lazy_load_for_parallelism(
+        tensor_parallel_size=training_args.tensor_parallel_size
+    ):
         model = AutoModelForCausalLM.from_pretrained(
             script_args.model_id,
             torch_dtype="auto",

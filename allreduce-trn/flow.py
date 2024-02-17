@@ -3,6 +3,7 @@ from metaflow import FlowSpec, step, batch, parallel
 N_NODES = 2
 N_TRAINIUM = 16
 
+
 class TrainiumAllReduce(FlowSpec):
 
     @step
@@ -17,21 +18,23 @@ class TrainiumAllReduce(FlowSpec):
         cpu=96,
         memory=500000,
         image="public.ecr.aws/outerbounds/trainium:latest",
-        queue="oleg2-mztdpcvj-efa"
+        queue="oleg2-mztdpcvj-efa",
     )
     @step
     def make_instance(self):
         import subprocess
+
         subprocess.run(["./allreduce.sh"])
         self.next(self.join)
 
     @step
     def join(self, inputs):
         self.next(self.end)
-    
+
     @step
     def end(self):
         pass
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     TrainiumAllReduce()

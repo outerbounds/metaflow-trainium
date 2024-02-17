@@ -475,10 +475,10 @@ def train_llama(flags):
                         (running_loss_reduced_detached, total_norm.detach()),
                     )
                 # Save checkpoint using checkpoint API
-                if args.force_checkpoint or ((
-                    args.checkpoint_freq > 0) and (
-                    global_step % args.checkpoint_freq == 0
-                )):
+                if args.force_checkpoint or (
+                    (args.checkpoint_freq > 0)
+                    and (global_step % args.checkpoint_freq == 0)
+                ):
                     xm.add_step_closure(
                         nxd.save_checkpoint,
                         (
@@ -768,9 +768,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--force_checkpoint",
-        action = "store_true",
-        help = "force checkpointing every epoch even if checkpointing is disabled",
-        default = False
+        action="store_true",
+        help="force checkpointing every epoch even if checkpointing is disabled",
+        default=False,
     )
 
     args = parser.parse_args(sys.argv[1:])

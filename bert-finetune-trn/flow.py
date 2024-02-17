@@ -5,6 +5,7 @@ import sys
 from config import ConfigBase, EnvironmentConfig, TrainiumLlama2FinetuneConfig
 from ops import DataStore, TokenizerStore, ModelStore
 from custom_decorators import pip, enable_decorator
+
 # from gpu_monitor import gpu_monitor
 
 environment_config = EnvironmentConfig()
@@ -33,7 +34,10 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
         tokenizer_store = self._get_tokenizer_store()
         if not tokenizer_store.already_exists():
             from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(self.config.model_store.hf_model_name)
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.config.model_store.hf_model_name
+            )
             tokenizer.save_pretrained(self.config.tokenizer_store.local_path)
             tokenizer_store.upload(self.config.tokenizer_store.local_path)
         self.next(self.cache_dataset)
@@ -46,9 +50,14 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
         if not data_store.already_exists():
             tokenizer_store = self._get_tokenizer_store()
             tokenizer_store.download(self.config.tokenizer_store.local_path)
-            data_store.download_from_huggingface(self.config.data_store, self.config.tokenizer_store.local_path)
+            data_store.download_from_huggingface(
+                self.config.data_store, self.config.tokenizer_store.local_path
+            )
             data_store.upload(self.config.data_store.local_path)
-        self.next(self.tune_llama2, num_parallel=environment_config.tune_llama2_step.batch_job.n_nodes)
+        self.next(
+            self.tune_llama2,
+            num_parallel=environment_config.tune_llama2_step.batch_job.n_nodes,
+        )
 
     @pip(packages={**environment_config.tune_llama2_step.packages})
     @environment(vars=environment_config.tune_llama2_step.env_vars)
@@ -59,7 +68,7 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
         memory=environment_config.tune_llama2_step.batch_job.memory,
         image=environment_config.tune_llama2_step.batch_job.image,
         queue=environment_config.tune_llama2_step.batch_job.job_queue,
-        use_tmpfs=True, # size is 1/2 of `memory` by default.
+        use_tmpfs=True,  # size is 1/2 of `memory` by default.
         shared_memory=environment_config.tune_llama2_step.batch_job.shared_memory,
     )
     @torchrun
@@ -76,20 +85,24 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
             return path
 
         data_dir = make_path(self.config.data_store.local_path)
-        checkpoint_dir = make_path(self.config.model_store.local_checkpoints_path, use_tmpfs=True)
+        checkpoint_dir = make_path(
+            self.config.model_store.local_checkpoints_path, use_tmpfs=True
+        )
 
         # Download tokenized data.
         data_store = self._get_data_store()
         data_store.download(download_path=data_dir)
 
         self.compile = False
-        if self.compile: 
-            pass # TODO: Use neuron compile and cache the model graph for trainium.
+        if self.compile:
+            pass  # TODO: Use neuron compile and cache the model graph for trainium.
 
         entrypoint_args = {
             "model_id": self.config.model_store.hf_model_name,
             "dataset_path": data_dir,
-            "pretrained_model_cache": os.path.join(current.tempdir, "pretrained_model_cache"),
+            "pretrained_model_cache": os.path.join(
+                current.tempdir, "pretrained_model_cache"
+            ),
             "bf16": self.config.training.bf16,
             "learning_rate": self.config.training.learning_rate,
             "output_dir": checkpoint_dir,
@@ -109,6 +122,7 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
         print("sleeping...")
 
         import time
+
         time.sleep(3600 * 2)
 
         self.next(self.join)
@@ -121,5 +135,6 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
     def end(self):
         pass
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     TrainiumLlama2Finetune()

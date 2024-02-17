@@ -63,13 +63,13 @@ caching_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0", 
+    "omegaconf": "2.3.0",
 }
 
 
 @dataclass
 class CachingEnvironmentConfig:
-    batch_enabled: bool = False # NOTE: Turn this on to tokenize data remotely.
+    batch_enabled: bool = False  # NOTE: Turn this on to tokenize data remotely.
     packages: Dict[str, str] = field(default_factory=lambda: caching_env_config)
 
 
@@ -81,34 +81,31 @@ training_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0", 
+    "omegaconf": "2.3.0",
 }
 
 
-env_vars_config = {
-    "NCCL_DEBUG": "INFO",
-    "NCCL_SOCKET_IFNAME": "eth0"
-}
-
+env_vars_config = {"NCCL_DEBUG": "INFO", "NCCL_SOCKET_IFNAME": "eth0"}
 
 
 # p3dn.24xlarge
 @dataclass
 class BatchJobConfig:
     n_nodes: int = 1
-    n_gpu: int = 8       
-    n_cpu: int = 96    
+    n_gpu: int = 8
+    n_cpu: int = 96
     memory: int = 500000
     image: str = "public.ecr.aws/outerbounds/transformers:latest"
     job_queue: str = "v100-32gb"
     shared_memory: int = 2000
 
-# g5.48xlarge --> OOM 
+
+# g5.48xlarge --> OOM
 # @dataclass
 # class BatchJobConfig:
 #     n_nodes: int = 1
-#     n_gpu: int = 8       
-#     n_cpu: int = 96    
+#     n_gpu: int = 8
+#     n_cpu: int = 96
 #     memory: int = 500000
 #     image: str = "public.ecr.aws/outerbounds/transformers:latest"
 #     job_queue: str = "a10g"
@@ -117,8 +114,8 @@ class BatchJobConfig:
 # p3.16xlarge --> too small
 # class BatchJobConfig:
 #     n_nodes: int = 1
-#     n_gpu: int = 8 
-#     n_cpu: int = 64     
+#     n_gpu: int = 8
+#     n_cpu: int = 64
 #     memory: int = 400000
 #     image: str = "public.ecr.aws/p7g1e3j4/deepspeed:6"
 #     job_queue: str = "oleg2-mztdpcvj-gpu"
@@ -136,9 +133,7 @@ class EnvironmentConfig:
     dataset_cache_step: CachingEnvironmentConfig = field(
         default_factory=CachingEnvironmentConfig
     )
-    tune_llama2_step: TuneLlama2EnvConfig = field(
-        default_factory=TuneLlama2EnvConfig
-    )
+    tune_llama2_step: TuneLlama2EnvConfig = field(default_factory=TuneLlama2EnvConfig)
 
 
 ### CONFIG HELPERS ###

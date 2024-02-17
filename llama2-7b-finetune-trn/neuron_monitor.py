@@ -35,37 +35,23 @@ MONITOR_FIELDS = [
 CONFIG_FILENAME = "monitor.conf"
 MONITOR = """neuron-monitor --config-file {}""".format(CONFIG_FILENAME)
 CONFIG_TEMPLATE = {
-  "period": None,
-  "neuron_runtimes": [
-    {
-      "tag_filter": ".*",
-      "metrics": [
+    "period": None,
+    "neuron_runtimes": [
         {
-          "type": "neuroncore_counters"
-        },
-        {
-          "type": "memory_used"
-        },
-        {
-          "type": "neuron_runtime_vcpu_usage"
-        },
-        {
-          "type": "execution_stats"
+            "tag_filter": ".*",
+            "metrics": [
+                {"type": "neuroncore_counters"},
+                {"type": "memory_used"},
+                {"type": "neuron_runtime_vcpu_usage"},
+                {"type": "execution_stats"},
+            ],
         }
-      ]
-    }
-  ],
-  "system_metrics": [
-    {
-      "type": "vcpu_usage"
-    },
-    {
-      "type": "memory_info"
-    },
-    {
-       "type": "neuron_hw_counters"
-    }
-  ]
+    ],
+    "system_metrics": [
+        {"type": "vcpu_usage"},
+        {"type": "memory_info"},
+        {"type": "neuron_hw_counters"},
+    ],
 }
 
 ProcessUUID = namedtuple("ProcessUUID", ["uuid", "start_time", "end_time"])
@@ -175,7 +161,7 @@ class NeuronMonitor:
     def __init__(self, interval=1, duration=300) -> None:
 
         with open(CONFIG_FILENAME, "w") as f:
-            CONFIG_TEMPLATE['period'] = f"{interval}s"
+            CONFIG_TEMPLATE["period"] = f"{interval}s"
             json.dump(CONFIG_TEMPLATE, f)
 
         self._tempdir = TemporaryDirectory(prefix="neuron_card_monitor", dir="./")
@@ -240,24 +226,28 @@ class NeuronMonitor:
             jtmp = json.loads(line.decode())
             time = datetime.now().strftime(TS_FORMAT)
             vals = {}
-            for rt_data in jtmp['neuron_runtime_data']:
+            for rt_data in jtmp["neuron_runtime_data"]:
                 # core utilization
-                d = rt_data['report']['neuroncore_counters']['neuroncores_in_use']
+                d = rt_data["report"]["neuroncore_counters"]["neuroncores_in_use"]
                 for k in d.keys():
-                    vals[k] = vals.get(k, 0) + d[k]['neuroncore_utilization']
+                    vals[k] = vals.get(k, 0) + d[k]["neuroncore_utilization"]
                     if k not in devdata:
                         devdata[k] = {
                             "neuron_utilization": [],
                             "memory_used": [],
                             "memory_total": [],
-                            "timestamp": []
+                            "timestamp": [],
                         }
                     devdata[k]["neuron_utilization"].append(vals[k])
                 # memory utilization
-                d = rt_data['report']['memory_used']['neuron_runtime_used_bytes']['usage_breakdown']['neuroncore_memory_usage']
+                d = rt_data["report"]["memory_used"]["neuron_runtime_used_bytes"][
+                    "usage_breakdown"
+                ]["neuroncore_memory_usage"]
                 for k in d.keys():
                     devdata[k]["memory_used"].append(sum(d[k].values()))
-                    devdata[k]["memory_total"].append(32 / 2 * 1024 * 1024 * 1024) # NOTE: assumes 32GB memory per device.
+                    devdata[k]["memory_total"].append(
+                        32 / 2 * 1024 * 1024 * 1024
+                    )  # NOTE: assumes 32GB memory per device.
                 # metadata
                 for k in d.keys():
                     devdata[k]["timestamp"].append(time)
@@ -341,14 +331,17 @@ def _update_utilization(results, md_dict):
     for device, data in results["profile"].items():
         if device not in md_dict:
             print(
-                "Device %s not found in the Neuron monitor card layout. Skipping..." % device,
+                "Device %s not found in the Neuron monitor card layout. Skipping..."
+                % device,
                 file=sys.stderr,
             )
             continue
         md_dict[device]["neuron"].update(
             "%2.1f%%" % max(map(float, data["neuron_utilization"]))
         )
-        md_dict[device]["memory"].update("%dMB" % max(map(lambda x: float(x) / (1024 * 1024), data["memory_used"])))
+        md_dict[device]["memory"].update(
+            "%dMB" % max(map(lambda x: float(x) / (1024 * 1024), data["memory_used"]))
+        )
 
 
 def _update_charts(results, md_dict):
@@ -375,19 +368,24 @@ def _update_charts(results, md_dict):
 class NeuronProfiler:
     def __init__(self, interval=1, monitor_batch_duration=10):
         self.error = False
-        self._monitor = NeuronMonitor(interval=interval, duration=monitor_batch_duration)
+        self._monitor = NeuronMonitor(
+            interval=interval, duration=monitor_batch_duration
+        )
         self._monitor_thread = threading.Thread(
-            target=self._monitor._monitor_update_thread, # daemon=True
+            target=self._monitor._monitor_update_thread,  # daemon=True
         )
         self._monitor_thread.start()
-        self._interval = interval 
+        self._interval = interval
 
         time.sleep(1)
         self.hardware_info_dict = self._monitor.read_hardware_info()
-        self.devices = [str(i) for i in range(
-            int(self.hardware_info_dict["neuron_device_count"]) *
-            int(self.hardware_info_dict["neuroncore_per_device_count"])
-        )]
+        self.devices = [
+            str(i)
+            for i in range(
+                int(self.hardware_info_dict["neuron_device_count"])
+                * int(self.hardware_info_dict["neuroncore_per_device_count"])
+            )
+        ]
 
         self._card_comps = {"max_utilization": {}, "charts": {}, "reading_duration": {}}
         self._card_created = False
@@ -452,7 +450,9 @@ class NeuronProfiler:
                 }
             _rows = [[Markdown(k)] + list(v.values()) for k, v in rows.items()]
             els.append(
-                Table(data=_rows, headers=["Device ID", "Max neuron core %", "Max memory"])
+                Table(
+                    data=_rows, headers=["Device ID", "Max neuron core %", "Max memory"]
+                )
             )
             els.append(
                 Markdown(f"Detailed data saved in an artifact `{artifact_name}`")
@@ -460,7 +460,9 @@ class NeuronProfiler:
             return rows
 
         def _plots():
-            els.append(Markdown("## Neuron core utilization and memory usage over time"))
+            els.append(
+                Markdown("## Neuron core utilization and memory usage over time")
+            )
             rows = {}
             for device_id in results["devices"]:
                 neuron_plot, mem_plot, ts_range = profile_plots(

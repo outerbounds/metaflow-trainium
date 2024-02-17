@@ -62,7 +62,9 @@ class ModelArchitectureConfig:
 
 @dataclass
 class TrainingConfig:
-    tensor_parallelism_degree: int = 8 # NOTE: always keep this lower than num devices per node.
+    tensor_parallelism_degree: int = (
+        8  # NOTE: always keep this lower than num devices per node.
+    )
     use_mix_precision: bool = True
     use_zero_1: bool = True  # NOTE: 0 --> pure data parallelism, 1 --> ZeRO-1
     global_batch_size: int = 1024
@@ -99,13 +101,13 @@ caching_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0", 
+    "omegaconf": "2.3.0",
 }
 
 
 @dataclass
 class CachingEnvironmentConfig:
-    batch_enabled: bool = False # NOTE: Turn this on to tokenize data remotely.
+    batch_enabled: bool = False  # NOTE: Turn this on to tokenize data remotely.
     packages: Dict[str, str] = field(default_factory=lambda: caching_env_config)
 
 
@@ -117,7 +119,7 @@ training_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0", 
+    "omegaconf": "2.3.0",
 }
 
 

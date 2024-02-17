@@ -8,7 +8,7 @@ from transformers import (
     set_seed,
     HfArgumentParser,
     Trainer,
-    TrainingArguments
+    TrainingArguments,
 )
 
 # from optimum.neuron import NeuronHfArgumentParser as HfArgumentParser
@@ -66,15 +66,15 @@ class ScriptArguments:
         metadata={
             "help": "The model that you want to train from the Hugging Face hub. E.g. gpt2, gpt2-xl, bert, etc."
         },
-        default="philschmid/Llama-2-7b-hf"
+        default="philschmid/Llama-2-7b-hf",
     )
     dataset_path: str = field(
         metadata={"help": "Path to the preprocessed and tokenized dataset."},
-        default="data/databricks-dolly-15k"
+        default="data/databricks-dolly-15k",
     )
     pretrained_model_cache: str = field(
         metadata={"help": "Path to the preprocessed and tokenized dataset."},
-        default="/metaflow_temp/pretrained_model_cache"
+        default="/metaflow_temp/pretrained_model_cache",
     )
 
 
