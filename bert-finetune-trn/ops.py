@@ -123,7 +123,7 @@ class DataStore(BaseStore):
 
         # Load dataset from the hub
         dataset = load_dataset(
-            store_config.hf_dataset_name, # split=store_config.hf_dataset_split
+            store_config.hf_dataset_name,  # split=store_config.hf_dataset_split
         )
 
         self.local_save_path = os.path.abspath(
@@ -138,16 +138,26 @@ class DataStore(BaseStore):
         tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
 
         def tokenize(batch):
-            return tokenizer(batch['text'], padding='max_length', truncation=True,return_tensors="pt")
+            return tokenizer(
+                batch["text"],
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+            )
 
         # Tokenize dataset
-        dataset =  dataset.rename_column("label", "labels") # to match Trainer
+        dataset = dataset.rename_column("label", "labels")  # to match Trainer
         tokenized_dataset = dataset.map(tokenize, batched=True, remove_columns=["text"])
         tokenized_dataset = tokenized_dataset.with_format("torch")
 
         # save dataset to disk
-        tokenized_dataset["train"].save_to_disk(os.path.join(self.local_save_path, "train"))
-        tokenized_dataset["test"].save_to_disk(os.path.join(self.local_save_path, "eval"))
+        tokenized_dataset["train"].save_to_disk(
+            os.path.join(self.local_save_path, "train")
+        )
+        tokenized_dataset["test"].save_to_disk(
+            os.path.join(self.local_save_path, "eval")
+        )
+
 
 class TokenizerStore(BaseStore):
 

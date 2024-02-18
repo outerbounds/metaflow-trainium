@@ -63,13 +63,13 @@ caching_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0", 
+    "omegaconf": "2.3.0",
 }
 
 
 @dataclass
 class CachingEnvironmentConfig:
-    batch_enabled: bool = False # NOTE: Turn this on to tokenize data remotely.
+    batch_enabled: bool = False  # NOTE: Turn this on to tokenize data remotely.
     packages: Dict[str, str] = field(default_factory=lambda: caching_env_config)
 
 
@@ -82,7 +82,7 @@ training_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0", 
+    "omegaconf": "2.3.0",
 }
 
 
@@ -118,9 +118,7 @@ class EnvironmentConfig:
     dataset_cache_step: CachingEnvironmentConfig = field(
         default_factory=CachingEnvironmentConfig
     )
-    tune_llama2_step: TuneLlama2EnvConfig = field(
-        default_factory=TuneLlama2EnvConfig
-    )
+    tune_llama2_step: TuneLlama2EnvConfig = field(default_factory=TuneLlama2EnvConfig)
 
 
 ### CONFIG HELPERS ###

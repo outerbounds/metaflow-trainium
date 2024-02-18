@@ -33,7 +33,10 @@ class BERTFinetune(FlowSpec, ConfigBase):
         tokenizer_store = self._get_tokenizer_store()
         if not tokenizer_store.already_exists():
             from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(self.config.model_store.hf_model_name)
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.config.model_store.hf_model_name
+            )
             tokenizer.save_pretrained(self.config.tokenizer_store.local_path)
             tokenizer_store.upload(self.config.tokenizer_store.local_path)
         self.next(self.cache_dataset)
@@ -100,12 +103,12 @@ class BERTFinetune(FlowSpec, ConfigBase):
             "num_train_epochs": self.config.training.num_train_epochs,
             "logging_steps": self.config.training.logging_steps,
             "gradient_accumulation_steps": self.config.training.gradient_accumulation_steps,
-
         }
 
         # Train the model.
-        current.torch.run(entrypoint="train.py", entrypoint_args=entrypoint_args, master_port="41000")
-
+        current.torch.run(
+            entrypoint="train.py", entrypoint_args=entrypoint_args, master_port="41000"
+        )
 
         self.next(self.join)
 

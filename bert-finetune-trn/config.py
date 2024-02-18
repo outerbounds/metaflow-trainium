@@ -32,7 +32,6 @@ class ModelStoreConfig:
     s3_experiments_key: str = "experiments"
 
 
-
 @dataclass
 class TrainingConfig:
     bf16: bool = True
@@ -91,6 +90,7 @@ env_vars_config = {
     "CCOM_SOCKET_IFNAME": "eth0",
     "MALLOC_ARENA_MAX": "64",  # host OOM
 }
+
 
 # trn1.2xlarge
 class BatchJobConfig:
