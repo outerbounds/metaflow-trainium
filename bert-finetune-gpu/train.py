@@ -1,92 +1,165 @@
-from dataclasses import dataclass, field
+import argparse
+import logging
+import os
 
+import evaluate
+import numpy as np
 from datasets import load_from_disk
+from huggingface_hub import HfFolder
 from transformers import (
-    AutoModelForCausalLM,
+    AutoModelForSequenceClassification,
     AutoTokenizer,
-    default_data_collator,
     set_seed,
-    HfArgumentParser,
     Trainer,
     TrainingArguments,
 )
 
-# from optimum.neuron import NeuronHfArgumentParser as HfArgumentParser
-# from optimum.neuron import NeuronTrainer as Trainer
-# from optimum.neuron import NeuronTrainingArguments as TrainingArguments
-# from optimum.neuron.distributed import lazy_load_for_parallelism
+logger = logging.getLogger(__name__)
 
 
-def training_function(script_args, training_args):
-    # load dataset
-    dataset = load_from_disk(script_args.dataset_path)
+def parse_args():
+    """Parse the arguments."""
+    parser = argparse.ArgumentParser()
+    # add model id and dataset path argument
+    parser.add_argument(
+        "--model_id",
+        type=str,
+        default="bert-large-uncased",
+        help="Model id to use for training.",
+    )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default="dataset",
+        help="Path to the already processed dataset.",
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default=None, help="Output directory for the model."
+    )
+    # add training hyperparameters for epochs, batch size, learning rate, and seed
+    parser.add_argument(
+        "--epochs", type=int, default=3, help="Number of epochs to train for."
+    )
+    parser.add_argument(
+        "--per_device_train_batch_size",
+        type=int,
+        default=8,
+        help="Batch size to use for training.",
+    )
+    parser.add_argument(
+        "--per_device_eval_batch_size",
+        type=int,
+        default=8,
+        help="Batch size to use for testing.",
+    )
+    parser.add_argument(
+        "--lr", type=float, default=5e-5, help="Learning rate to use for training."
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Seed to use for training."
+    )
+    parser.add_argument(
+        "--bf16",
+        type=bool,
+        default=False,
+        help="Whether to use bf16.",
+    )
+    parser.add_argument(
+        "--hf_token",
+        type=str,
+        default=HfFolder.get_token(),
+        help="Token to use for uploading models to Hugging Face Hub.",
+    )
+    parser.add_argument(
+        "--pretrained_model_cache",
+        type=str,
+        default=None,
+        help="Path to the pretrained model cache.",
+    )
+    args = parser.parse_known_args()
+    return args
 
-    # load model from the hub with a bnb config
-    tokenizer = AutoTokenizer.from_pretrained(script_args.model_id)
-    model = AutoModelForCausalLM.from_pretrained(
-        script_args.model_id,
-        torch_dtype="auto",
-        low_cpu_mem_usage=True,
-        cache_dir=script_args.pretrained_model_cache,
-        # use_cache=False if training_args.gradient_checkpointing else True,
+
+# Metric Id
+metric = evaluate.load("f1")
+
+
+# Metric helper method
+def compute_metrics(eval_pred):
+    predictions, labels = eval_pred
+    predictions = np.argmax(predictions, axis=1)
+    return metric.compute(
+        predictions=predictions, references=labels, average="weighted"
+    )
+
+
+def training_function(args):
+    # set seed
+    set_seed(args.seed)
+
+    # load dataset from disk and tokenizer
+    train_dataset = load_from_disk(os.path.join(args.dataset_path, "train"))
+    eval_dataset = load_from_disk(os.path.join(args.dataset_path, "eval"))
+    tokenizer = AutoTokenizer.from_pretrained(args.model_id)
+
+    # Prepare model labels - useful for inference
+    labels = train_dataset.features["labels"].names
+    num_labels = len(labels)
+    label2id, id2label = {}, {}
+    for i, label in enumerate(labels):
+        label2id[label] = str(i)
+        id2label[str(i)] = label
+
+    # Download the model from huggingface.co/models
+    model = AutoModelForSequenceClassification.from_pretrained(
+        args.model_id, num_labels=num_labels, label2id=label2id, id2label=id2label
+    )
+
+    # Define training args
+    # output_dir = args.model_id.split("/")[-1] if "/" in args.model_id else args.model_id
+    # output_dir = f"{output_dir}-finetuned"
+    training_args = TrainingArguments(
+        overwrite_output_dir=True,
+        output_dir=args.output_dir,
+        per_device_train_batch_size=args.per_device_train_batch_size,
+        per_device_eval_batch_size=args.per_device_eval_batch_size,
+        bf16=args.bf16,  # Use BF16 if available
+        learning_rate=args.lr,
+        num_train_epochs=args.epochs,
+        # logging & evaluation strategies
+        logging_dir=f"{args.output_dir}/logs",
+        logging_strategy="steps",
+        logging_steps=10,
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        save_total_limit=2,
+        # push to hub parameters
+        report_to="tensorboard",
     )
 
     # Create Trainer instance
     trainer = Trainer(
         model=model,
-        tokenizer=tokenizer,
         args=training_args,
-        train_dataset=dataset,
-        data_collator=default_data_collator,  # no special collator needed since we stacked the dataset
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        compute_metrics=compute_metrics,
     )
 
     # Start training
     trainer.train()
 
-    trainer.save_model()  # Saves the tokenizer too for easy upload
+    eval_res = trainer.evaluate(eval_dataset=eval_dataset)
 
-    # Consolidate sharded checkpoint files to single file when TP degree > 1
-    # perrysc@amazon.com
-    # if (int(os.environ.get("RANK", -1)) == 0) and int(training_args.tensor_parallel_size) > 1:
-    #     print("Converting sharded checkpoint to consolidated format")
-    #     from optimum.neuron.distributed.checkpointing import (
-    #         consolidate_tensor_parallel_checkpoints_to_unified_checkpoint,
-    #     )
-    #     from shutil import rmtree
+    print(eval_res)
 
-    #     consolidate_tensor_parallel_checkpoints_to_unified_checkpoint(
-    #         training_args.output_dir, training_args.output_dir, "pytorch"
-    #     )
-    #     rmtree(os.path.join(training_args.output_dir, "tensor_parallel_shards"))  # remove sharded checkpoint files
-
-
-@dataclass
-class ScriptArguments:
-    model_id: str = field(
-        metadata={
-            "help": "The model that you want to train from the Hugging Face hub. E.g. gpt2, gpt2-xl, bert, etc."
-        },
-        default="philschmid/Llama-2-7b-hf",
-    )
-    dataset_path: str = field(
-        metadata={"help": "Path to the preprocessed and tokenized dataset."},
-        default="data/databricks-dolly-15k",
-    )
-    pretrained_model_cache: str = field(
-        metadata={"help": "Path to the preprocessed and tokenized dataset."},
-        default="/metaflow_temp/pretrained_model_cache",
-    )
+    # Save our tokenizer and create model card
+    tokenizer.save_pretrained(output_dir)
 
 
 def main():
-    parser = HfArgumentParser([ScriptArguments, TrainingArguments])
-    script_args, training_args = parser.parse_args_into_dataclasses()
-
-    # set seed
-    set_seed(training_args.seed)
-
-    # run training function
-    training_function(script_args, training_args)
+    args, _ = parse_args()
+    training_function(args)
 
 
 if __name__ == "__main__":
