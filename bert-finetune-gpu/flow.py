@@ -33,10 +33,7 @@ class BERTFinetune(FlowSpec, ConfigBase):
         tokenizer_store = self._get_tokenizer_store()
         if not tokenizer_store.already_exists():
             from transformers import AutoTokenizer
-
-            tokenizer = AutoTokenizer.from_pretrained(
-                self.config.model_store.hf_model_name
-            )
+            tokenizer = AutoTokenizer.from_pretrained(self.config.model_store.hf_model_name)
             tokenizer.save_pretrained(self.config.tokenizer_store.local_path)
             tokenizer_store.upload(self.config.tokenizer_store.local_path)
         self.next(self.cache_dataset)
@@ -70,6 +67,9 @@ class BERTFinetune(FlowSpec, ConfigBase):
     @step
     def tune_bert(self):
 
+        from omegaconf import OmegaConf
+        import json
+
         def make_path(rel_path, make_dir=True, use_tmpfs=False):
             if use_tmpfs:
                 path = os.path.join(current.tempdir, rel_path)
@@ -81,33 +81,44 @@ class BERTFinetune(FlowSpec, ConfigBase):
 
         data_dir = make_path(self.config.data_store.local_path)
         checkpoint_dir = make_path(
-            self.config.model_store.local_checkpoints_path, use_tmpfs=True
+            self.config.model_store.local_checkpoints_path, 
+            use_tmpfs=environment_config.tune_bert_step.batch_job.use_tmpfs
         )
+        model_path = make_path(self.config.model_store.local_weights_path)
 
         # Download tokenized data.
         data_store = self._get_data_store()
         data_store.download(download_path=data_dir)
 
+        # convert deepspeed config to json file
+        deepspeed_config_file = "ds_config.json"
+        model_arch_config = OmegaConf.to_container(self.config.deepspeed)
+        with open(os.path.join(model_path, deepspeed_config_file), "w") as f:
+            json.dump(model_arch_config, f)
+
         entrypoint_args = {
             "model_id": self.config.model_store.hf_model_name,
             "dataset_path": data_dir,
-            "pretrained_model_cache": os.path.join(
-                current.tempdir, "pretrained_model_cache"
-            ),
+            "pretrained_model_cache": os.path.join(current.tempdir, "pretrained_model_cache"),
             "bf16": self.config.training.bf16,
-            "learning_rate": self.config.training.learning_rate,
+            "lr": self.config.training.learning_rate,
             "output_dir": checkpoint_dir,
-            "overwrite_output_dir": self.config.training.overwrite_output_dir,
             "per_device_train_batch_size": self.config.training.per_device_train_batch_size,
-            "gradient_checkpointing": self.config.training.gradient_checkpointing,
-            "num_train_epochs": self.config.training.num_train_epochs,
-            "logging_steps": self.config.training.logging_steps,
-            "gradient_accumulation_steps": self.config.training.gradient_accumulation_steps,
+            "epochs": self.config.training.epochs,
+            "logging_steps": self.config.training.logging_steps, 
+            "deepspeed": deepspeed_config_file
         }
-
+ 
         # Train the model.
-        current.torch.run(
-            entrypoint="train.py", entrypoint_args=entrypoint_args, master_port="41000"
+        current.torch.run(entrypoint="train.py", entrypoint_args=entrypoint_args, master_port="41000")
+        model_store = self._get_model_store()
+        model_store.upload(
+            local_path=checkpoint_dir,
+            store_key=os.path.join(
+                self.config.model_store.s3_checkpoints_key,
+                current.run_id,
+                str(current.parallel.node_index),
+            ),
         )
 
         self.next(self.join)
