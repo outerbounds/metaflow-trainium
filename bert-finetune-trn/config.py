@@ -8,46 +8,44 @@ from metaflow import IncludeFile, Parameter, JSONType
 ### DATASET ###
 @dataclass
 class DataStoreConfig:
-    hf_dataset_name: str = "databricks/databricks-dolly-15k"
+    hf_dataset_name: str = "philschmid/emotion"
     hf_dataset_split: str = "train"
-    local_path: str = "data/databricks-dolly-15k"
-    s3_prefix: str = "databricks-dolly-15k"
+    local_path: str = "data/twitter-emotion"
+    s3_prefix: str = "twitter-emotion"
 
 
 ### TOKENIZER ###
 @dataclass
 class TokenizerStoreConfig:
     local_path: str = "tokenizer.model"
-    s3_prefix: str = "philschmid/Llama-2-7b-hf/tokenizer"
+    s3_prefix: str = "bert-base-uncased/tokenizer"
 
 
 ### MODEL ###
 @dataclass
 class ModelStoreConfig:
-    hf_model_name: str = "philschmid/Llama-2-7b-hf"
+    hf_model_name: str = "bert-base-uncased"
     local_weights_path: str = "model"
     local_checkpoints_path: str = "model/checkpoints"
-    s3_prefix: str = "philschmid/Llama-2-7b-hf/model"
+    s3_prefix: str = "bert-base-uncased/model"
     s3_checkpoints_key: str = "checkpoints"
     s3_experiments_key: str = "experiments"
 
 
+
 @dataclass
 class TrainingConfig:
-    bf16: bool = False
+    bf16: bool = True
     learning_rate: float = 5e-5
-    per_device_train_batch_size: int = 1
-    gradient_checkpointing: bool = True
-    tensor_parallel_size: int = 8
-    num_train_epochs: int = 3
-    logging_steps: int = 10
-    gradient_accumulation_steps: int = 16
-    skip_cache_push: bool = True
-    overwrite_output_dir: bool = True
+    per_device_train_batch_size: int = 16
+    tensor_parallel_size: int = 1
+    epochs: int = 3
+    logging_steps: int = 1
+    gradient_accumulation_steps: int = 1
 
 
 @dataclass
-class TrainiumLlama2FinetuneConfig:
+class TrainiumBERTFinetuneConfig:
     data_store: DataStoreConfig = field(default_factory=DataStoreConfig)
     tokenizer_store: TokenizerStoreConfig = field(default_factory=TokenizerStoreConfig)
     model_store: ModelStoreConfig = field(default_factory=ModelStoreConfig)
@@ -73,11 +71,12 @@ class CachingEnvironmentConfig:
     packages: Dict[str, str] = field(default_factory=lambda: caching_env_config)
 
 
-# for @step tune_llama2 in flow.py
+# for @step tune_bert in flow.py
 training_env_config = {
-    "transformers": "4.31.0",
+    "git+https://github.com/huggingface/optimum-neuron.git": "",
+    "evaluate": "0.4.1",
     "regex": "2023.12.25",
-    "tensorboard": "2.15.1",
+    # "tensorboard": "2.15.1",
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
@@ -85,44 +84,27 @@ training_env_config = {
 }
 
 
-env_vars_config = {"NCCL_DEBUG": "INFO", "NCCL_SOCKET_IFNAME": "eth0"}
+env_vars_config = {
+    # "FI_EFA_USE_DEVICE_RDMA": "1",
+    # "FI_PROVIDER": "efa",
+    "FI_EFA_FORK_SAFE": "1",
+    "CCOM_SOCKET_IFNAME": "eth0",
+    "MALLOC_ARENA_MAX": "64",  # host OOM
+}
 
-
-# p3dn.24xlarge
-@dataclass
+# trn1.2xlarge
 class BatchJobConfig:
     n_nodes: int = 1
-    n_gpu: int = 8
-    n_cpu: int = 96
-    memory: int = 500000
-    image: str = "public.ecr.aws/outerbounds/transformers:latest"
-    job_queue: str = "v100-32gb"
-    shared_memory: int = 2000
-
-
-# g5.48xlarge --> OOM
-# @dataclass
-# class BatchJobConfig:
-#     n_nodes: int = 1
-#     n_gpu: int = 8
-#     n_cpu: int = 96
-#     memory: int = 500000
-#     image: str = "public.ecr.aws/outerbounds/transformers:latest"
-#     job_queue: str = "a10g"
-#     shared_memory: int = 2000
-
-# p3.16xlarge --> too small
-# class BatchJobConfig:
-#     n_nodes: int = 1
-#     n_gpu: int = 8
-#     n_cpu: int = 64
-#     memory: int = 400000
-#     image: str = "public.ecr.aws/p7g1e3j4/deepspeed:6"
-#     job_queue: str = "oleg2-mztdpcvj-gpu"
+    n_trainium: int = 1
+    n_cpu: int = 4
+    memory: int = 24000
+    image: str = "public.ecr.aws/outerbounds/trainium:llama2"
+    job_queue: str = "small-trainium"
+    use_tmpfs: bool = False
 
 
 @dataclass
-class TuneLlama2EnvConfig:
+class TuneBERTEnvConfig:
     packages: Dict[str, str] = field(default_factory=lambda: training_env_config)
     env_vars: Dict[str, str] = field(default_factory=lambda: env_vars_config)
     batch_job: BatchJobConfig = field(default_factory=BatchJobConfig)
@@ -133,7 +115,7 @@ class EnvironmentConfig:
     dataset_cache_step: CachingEnvironmentConfig = field(
         default_factory=CachingEnvironmentConfig
     )
-    tune_llama2_step: TuneLlama2EnvConfig = field(default_factory=TuneLlama2EnvConfig)
+    tune_bert_step: TuneBERTEnvConfig = field(default_factory=TuneBERTEnvConfig)
 
 
 ### CONFIG HELPERS ###
@@ -187,9 +169,9 @@ class ConfigBase:
     Usage Example:
     --------
     ```
-    _CORE_CONFIG_CLASS = TrainiumLlama2FinetuneConfig
+    _CORE_CONFIG_CLASS = TrainiumBERTFinetuneConfig
     @property
-    def config(self) -> TrainiumLlama2FinetuneConfig:
+    def config(self) -> TrainiumBERTFinetuneConfig:
         return self._get_config()
     ```
     """
@@ -249,4 +231,4 @@ if __name__ == "__main__":
         ).upper()[0]
         if user_input != "Y":
             sys.exit("Exiting...")
-    create_config("config.yaml", TrainiumLlama2FinetuneConfig)
+    create_config("config.yaml", TrainiumBERTFinetuneConfig)

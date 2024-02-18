@@ -1,23 +1,12 @@
 import os
 import shutil
-from itertools import chain
 from typing import Union
-from functools import partial
 from random import randint
 
 from metaflow import S3
 from metaflow.metaflow_config import DATATOOLS_S3ROOT
 
 from config import DataStoreConfig, TokenizerStoreConfig, ModelStoreConfig
-
-remainder = {"input_ids": [], "attention_mask": [], "token_type_ids": []}
-
-
-LLAMA_2_TOKENIZER_DOWNLOAD_INSTRUCTIONS = """To continue, you must download the Llama2 Tokenizer.
-Pull the tokenizer from HuggingFace, after being granted access by Meta. 
-Detailed instructions for acquiring the tokenizer are available [here](https://huggingface.co/meta-llama/Llama-2-7b). 
-When downloading and using the Llama2 Tokenizer and models, you are responsible for adhering to the Meta license.
-"""
 
 
 class BaseStore:
@@ -123,70 +112,10 @@ class DataStore(BaseStore):
     def from_config(cls, config: DataStoreConfig):
         return cls(os.path.join(DATATOOLS_S3ROOT, config.s3_prefix))
 
-    def format_dolly(self, sample):
-        instruction = f"### Instruction\n{sample['instruction']}"
-        context = (
-            f"### Context\n{sample['context']}" if len(sample["context"]) > 0 else None
-        )
-        response = f"### Answer\n{sample['response']}"
-        # join all the parts together
-        prompt = "\n\n".join(
-            [i for i in [instruction, context, response] if i is not None]
-        )
-        return prompt
-
-    # empty list to save remainder from batches to use in next batch
-    def pack_dataset(self, dataset, chunk_length=2048):
-        """
-        https://github.com/huggingface/optimum-neuron/blob/main/notebooks/text-generation/scripts/utils/pack_dataset.py
-        """
-        print(f"Chunking dataset into chunks of {chunk_length} tokens.")
-
-        def chunk(sample, chunk_length=chunk_length):
-            # define global remainder variable to save remainder from batches to use in next batch
-            global remainder
-            # Concatenate all texts and add remainder from previous batch
-            concatenated_examples = {k: list(chain(*sample[k])) for k in sample.keys()}
-            concatenated_examples = {
-                k: remainder[k] + concatenated_examples[k]
-                for k in concatenated_examples.keys()
-            }
-            # get total number of tokens for batch
-            batch_total_length = len(concatenated_examples[list(sample.keys())[0]])
-
-            # get max number of chunks for batch
-            if batch_total_length >= chunk_length:
-                batch_chunk_length = (batch_total_length // chunk_length) * chunk_length
-
-            # Split by chunks of max_len.
-            result = {
-                k: [
-                    t[i : i + chunk_length]
-                    for i in range(0, batch_chunk_length, chunk_length)
-                ]
-                for k, t in concatenated_examples.items()
-            }
-            # add remainder to global variable for next batch
-            remainder = {
-                k: concatenated_examples[k][batch_chunk_length:]
-                for k in concatenated_examples.keys()
-            }
-            # prepare labels
-            result["labels"] = result["input_ids"].copy()
-            return result
-
-        # tokenize and chunk dataset
-        lm_dataset = dataset.map(
-            partial(chunk, chunk_length=chunk_length),
-            batched=True,
-        )
-        print(f"Total number of samples: {len(lm_dataset)}")
-        return lm_dataset
-
     def download_from_huggingface(
         self, store_config: DataStoreConfig, tokenizer_local_path: str
     ):
-        "https://github.com/aws-neuron/neuronx-distributed/blob/main/examples/training/llama2/get_dataset.py"
+        "https://huggingface.co/docs/optimum-neuron/en/tutorials/fine_tune_bert"
 
         from transformers import AutoTokenizer
         from datasets import load_dataset
@@ -194,11 +123,8 @@ class DataStore(BaseStore):
 
         # Load dataset from the hub
         dataset = load_dataset(
-            store_config.hf_dataset_name, split=store_config.hf_dataset_split
+            store_config.hf_dataset_name, # split=store_config.hf_dataset_split
         )
-        # print(f"dataset size: {len(dataset)}")
-        # print(dataset[randrange(len(dataset))])
-        # dataset size: 15011
 
         self.local_save_path = os.path.abspath(
             os.path.expanduser(store_config.local_path)
@@ -211,29 +137,17 @@ class DataStore(BaseStore):
         )
         tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
 
-        # template dataset to add prompt to each sample
-        def template_dataset(sample):
-            sample["text"] = f"{self.format_dolly(sample)}{tokenizer.eos_token}"
-            return sample
+        def tokenize(batch):
+            return tokenizer(batch['text'], padding='max_length', truncation=True,return_tensors="pt")
 
-        # apply prompt template per sample
-        dataset = dataset.map(template_dataset, remove_columns=list(dataset.features))
-        # print random sample
-        print(dataset[randint(0, len(dataset))]["text"])
+        # Tokenize dataset
+        dataset =  dataset.rename_column("label", "labels") # to match Trainer
+        tokenized_dataset = dataset.map(tokenize, batched=True, remove_columns=["text"])
+        tokenized_dataset = tokenized_dataset.with_format("torch")
 
-        # tokenize dataset
-        dataset = dataset.map(
-            lambda sample: tokenizer(sample["text"]),
-            batched=True,
-            remove_columns=list(dataset.features),
-        )
-
-        # chunk dataset
-        lm_dataset = self.pack_dataset(
-            dataset, chunk_length=2048
-        )  # We use 2048 as the maximum length for packing
-        lm_dataset.save_to_disk(self.local_save_path)
-
+        # save dataset to disk
+        tokenized_dataset["train"].save_to_disk(os.path.join(self.local_save_path, "train"))
+        tokenized_dataset["test"].save_to_disk(os.path.join(self.local_save_path, "eval"))
 
 class TokenizerStore(BaseStore):
 

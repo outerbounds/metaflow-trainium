@@ -63,19 +63,18 @@ caching_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0",
+    "omegaconf": "2.3.0", 
 }
 
 
 @dataclass
 class CachingEnvironmentConfig:
-    batch_enabled: bool = False  # NOTE: Turn this on to tokenize data remotely.
+    batch_enabled: bool = False # NOTE: Turn this on to tokenize data remotely.
     packages: Dict[str, str] = field(default_factory=lambda: caching_env_config)
 
 
 # for @step tune_llama2 in flow.py
 training_env_config = {
-    # "optimum[neuron]": "1.16.2",
     "git+https://github.com/huggingface/optimum-neuron.git": "",
     # "transformers": "4.31.0",
     "regex": "2023.12.25",
@@ -83,12 +82,10 @@ training_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0",
+    "omegaconf": "2.3.0", 
 }
 
 
-# Derived from: https://github.com/aws-neuron/neuronx-distributed/blob/main/examples/training/llama2/tp_zero1_llama2_7b_hf_pretrain/tp_zero1_llama2_7b_hf_pretrain.sh
-NUM_RT_NEURON_CORES = 32  # trn1.32xlarge instance property.
 env_vars_config = {
     "FI_EFA_USE_DEVICE_RDMA": "1",
     "FI_PROVIDER": "efa",
@@ -121,7 +118,9 @@ class EnvironmentConfig:
     dataset_cache_step: CachingEnvironmentConfig = field(
         default_factory=CachingEnvironmentConfig
     )
-    tune_llama2_step: TuneLlama2EnvConfig = field(default_factory=TuneLlama2EnvConfig)
+    tune_llama2_step: TuneLlama2EnvConfig = field(
+        default_factory=TuneLlama2EnvConfig
+    )
 
 
 ### CONFIG HELPERS ###
