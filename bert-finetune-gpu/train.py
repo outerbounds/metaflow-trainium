@@ -149,12 +149,12 @@ def training_function(args):
     # Start training
     trainer.train()
 
-    eval_res = trainer.evaluate(eval_dataset=eval_dataset)
+    # eval_res = trainer.evaluate(eval_dataset=eval_dataset)
 
-    print(eval_res)
+    # print(eval_res)
 
     # Save our tokenizer and create model card
-    tokenizer.save_pretrained(output_dir)
+    tokenizer.save_pretrained(args.output_dir)
 
 
 def main():

@@ -30,18 +30,19 @@ class ModelStoreConfig:
     s3_prefix: str = "philschmid/Llama-2-7b-hf/model"
     s3_checkpoints_key: str = "checkpoints"
     s3_experiments_key: str = "experiments"
+    s3_neuron_compiler_cache_key: str = "neuron-compiler-cache"
 
 
 @dataclass
 class TrainingConfig:
     bf16: bool = True
     learning_rate: float = 5e-5
-    per_device_train_batch_size: int = 2
+    per_device_train_batch_size: int = 1
     gradient_checkpointing: bool = True
     tensor_parallel_size: int = 8
     num_train_epochs: int = 1
     logging_steps: int = 1
-    gradient_accumulation_steps: int = 8
+    gradient_accumulation_steps: int = 16
     skip_cache_push: bool = True
     overwrite_output_dir: bool = True
 

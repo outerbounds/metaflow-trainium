@@ -34,11 +34,11 @@ class ModelStoreConfig:
 
 @dataclass
 class TrainingConfig:
-    bf16: bool = True
+    bf16: bool = False
     learning_rate: float = 5e-5
     per_device_train_batch_size: int = 16
     gradient_checkpointing: bool = True
-    num_train_epochs: int = 3
+    epochs: int = 1
     logging_steps: int = 1
     gradient_accumulation_steps: int = 1
     overwrite_output_dir: bool = True
@@ -99,40 +99,20 @@ training_env_config = {
 }
 
 
-env_vars_config = {"NCCL_DEBUG": "INFO", "NCCL_SOCKET_IFNAME": "eth0"}
+env_vars_config = {
+    "NCCL_SOCKET_IFNAME": "eth0"
+}
 
 
-# p3dn.24xlarge
 @dataclass
 class BatchJobConfig:
     n_nodes: int = 1
-    n_gpu: int = 8
-    n_cpu: int = 96
-    memory: int = 500000
+    n_gpu: int = 1
+    n_cpu: int = 8
+    memory: int = 24000
     image: str = "public.ecr.aws/outerbounds/transformers:latest"
-    job_queue: str = "v100-32gb"
-    shared_memory: int = 2000
-
-
-# g5.48xlarge --> OOM
-# @dataclass
-# class BatchJobConfig:
-#     n_nodes: int = 1
-#     n_gpu: int = 8
-#     n_cpu: int = 96
-#     memory: int = 500000
-#     image: str = "public.ecr.aws/outerbounds/transformers:latest"
-#     job_queue: str = "a10g"
-#     shared_memory: int = 2000
-
-# p3.16xlarge --> too small
-# class BatchJobConfig:
-#     n_nodes: int = 1
-#     n_gpu: int = 8
-#     n_cpu: int = 64
-#     memory: int = 400000
-#     image: str = "public.ecr.aws/p7g1e3j4/deepspeed:6"
-#     job_queue: str = "oleg2-mztdpcvj-gpu"
+    queue: str = "oleg2-mztdpcvj-gpu"
+    shared_memory: int = 1000
 
 
 @dataclass
@@ -147,7 +127,7 @@ class EnvironmentConfig:
     dataset_cache_step: CachingEnvironmentConfig = field(
         default_factory=CachingEnvironmentConfig
     )
-    tune_bert_step: TuneBERT2EnvConfig = field(default_factory=TuneBERT2EnvConfig)
+    tune_bert_step: TuneBERTEnvConfig = field(default_factory=TuneBERTEnvConfig)
 
 
 ### CONFIG HELPERS ###

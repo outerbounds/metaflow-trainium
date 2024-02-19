@@ -1,26 +1,28 @@
 data_store:
-  hf_dataset_name: databricks/databricks-dolly-15k
+  hf_dataset_name: philschmid/emotion
   hf_dataset_split: train
-  local_path: data/databricks-dolly-15k
-  s3_prefix: databricks-dolly-15k
+  local_path: data/twitter-emotion
+  s3_prefix: twitter-emotion
 tokenizer_store:
   local_path: tokenizer.model
-  s3_prefix: philschmid/Llama-2-7b-hf/tokenizer
+  s3_prefix: bert-base-uncased/tokenizer
 model_store:
-  hf_model_name: philschmid/Llama-2-7b-hf
+  hf_model_name: bert-base-uncased
   local_weights_path: model
   local_checkpoints_path: model/checkpoints
-  s3_prefix: philschmid/Llama-2-7b-hf/model
+  s3_prefix: bert-base-uncased/model
   s3_checkpoints_key: checkpoints
   s3_experiments_key: experiments
 training:
   bf16: false
   learning_rate: 5.0e-05
-  per_device_train_batch_size: 1
+  per_device_train_batch_size: 16
   gradient_checkpointing: true
-  tensor_parallel_size: 8
-  num_train_epochs: 3
-  logging_steps: 10
-  gradient_accumulation_steps: 16
-  skip_cache_push: true
+  epochs: 1
+  logging_steps: 1
+  gradient_accumulation_steps: 1
   overwrite_output_dir: true
+deepspeed:
+  train_micro_batch_size_per_gpu: 16
+  zero_optimization:
+    stage: 1

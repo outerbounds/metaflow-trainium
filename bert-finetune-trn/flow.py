@@ -93,7 +93,7 @@ class TrainiumBERTFinetune(FlowSpec, ConfigBase):
                 store_key=self.config.model_store.s3_neuron_compiler_cache_key
             )
         except ValueError as e:
-            print('Compiler cache is empty, optimum trainer will tell neuron-cc to compile the model, which can take hours...')
+            print('Compiler cache is empty, optimum trainer will tell neuron-cc to compile the model. It might take a while...')
 
         entrypoint_args = {
             "model_id": self.config.model_store.hf_model_name,

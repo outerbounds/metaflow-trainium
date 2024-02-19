@@ -57,11 +57,12 @@ class BERTFinetune(FlowSpec, ConfigBase):
     @gpu_profile(interval=1)
     @pip(packages={**environment_config.tune_bert_step.packages})
     @environment(vars=environment_config.tune_bert_step.env_vars)
-    @resources(
+    @batch(
         gpu=environment_config.tune_bert_step.batch_job.n_gpu,
         cpu=environment_config.tune_bert_step.batch_job.n_cpu,
         memory=environment_config.tune_bert_step.batch_job.memory,
-        # image=environment_config.tune_bert_step.batch_job.image,
+        image=environment_config.tune_bert_step.batch_job.image,
+        queue=environment_config.tune_bert_step.batch_job.queue,
     )
     @torchrun
     @step
@@ -80,10 +81,7 @@ class BERTFinetune(FlowSpec, ConfigBase):
             return path
 
         data_dir = make_path(self.config.data_store.local_path)
-        checkpoint_dir = make_path(
-            self.config.model_store.local_checkpoints_path, 
-            use_tmpfs=environment_config.tune_bert_step.batch_job.use_tmpfs
-        )
+        checkpoint_dir = make_path(self.config.model_store.local_checkpoints_path, use_tmpfs=False)
         model_path = make_path(self.config.model_store.local_weights_path)
 
         # Download tokenized data.
