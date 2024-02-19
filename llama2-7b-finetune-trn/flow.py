@@ -92,9 +92,16 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
         data_store = self._get_data_store()
         data_store.download(download_path=data_dir)
 
-        self.compile = False
-        if self.compile:
-            pass  # TODO: Use neuron compile and cache the model graph for trainium.
+        # Download the neuron compiler cache.
+        neuron_compiler_cache_dir = "/var/tmp/neuron-compile-cache"
+        try:
+            model_store = self._get_model_store()
+            model_store.download(
+                download_path=neuron_compiler_cache_dir,
+                store_key=self.config.model_store.s3_neuron_compiler_cache_key
+            )
+        except ValueError as e:
+            print('Compiler cache is empty, optimum trainer will tell neuron-cc to compile the model, which can take hours...')
 
         entrypoint_args = {
             "model_id": self.config.model_store.hf_model_name,
@@ -129,6 +136,21 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
                 str(current.parallel.node_index),
             ),
         )
+
+        # Upload the neuron compiler cache.
+        # Cache contents will be downloaded in future runs to bypass the HF hub cache mechanism and get the training started faster.
+        import subprocess
+        subprocess.run(["neuron_parallel_compile", "--command", "clear-locks"])
+        for subdir in os.listdir(neuron_compiler_cache_dir):
+            if subdir in ['lock']:
+                continue
+            model_store.upload(
+                local_path=os.path.join(neuron_compiler_cache_dir, subdir),
+                store_key=os.path.join(
+                    self.config.model_store.s3_neuron_compiler_cache_key,
+                    subdir
+                )
+            )
 
         self.next(self.join)
 
