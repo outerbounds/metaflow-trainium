@@ -13,6 +13,7 @@ model_store:
   s3_prefix: philschmid/Llama-2-7b-hf/model
   s3_checkpoints_key: checkpoints
   s3_experiments_key: experiments
+  s3_neuron_compiler_cache_key: neuron-compiler-cache
 training:
   bf16: true
   learning_rate: 5.0e-05

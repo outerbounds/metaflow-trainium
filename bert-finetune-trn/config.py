@@ -39,7 +39,7 @@ class TrainingConfig:
     learning_rate: float = 5e-5
     per_device_train_batch_size: int = 2
     # tensor_parallel_size: int = 1
-    epochs: int = 1
+    epochs: int = 2
     logging_steps: int = 10
 
 
