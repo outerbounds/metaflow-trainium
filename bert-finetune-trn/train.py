@@ -1,3 +1,5 @@
+"src: https://github.com/huggingface/optimum-neuron/blob/main/notebooks/text-classification/scripts/train.py"
+
 import argparse
 import logging
 import os
@@ -10,54 +12,34 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     set_seed,
-    Trainer,
-    TrainingArguments,
 )
 
+from optimum.neuron import NeuronTrainer as Trainer
+from optimum.neuron import NeuronTrainingArguments as TrainingArguments
+from optimum.neuron.distributed import lazy_load_for_parallelism
+
 logger = logging.getLogger(__name__)
+
+
+print(f"is precompilation: {os.environ.get('NEURON_PARALLEL_COMPILE')}")
+
+# torchrun --nproc_per_node 2 train.py --model_id bert-base-uncased --dataset_path /metaflow/metaflow/data/twitter-emotion --pretrained_model_cache ./pretrained_model_cache --bf16 True --lr 5e-05 --output_dir /metaflow/metaflow/model/checkpoints --per_device_train_batch_size 1 --epochs 3 --logging_steps 10
 
 
 def parse_args():
     """Parse the arguments."""
     parser = argparse.ArgumentParser()
     # add model id and dataset path argument
-    parser.add_argument(
-        "--model_id",
-        type=str,
-        default="bert-large-uncased",
-        help="Model id to use for training.",
-    )
-    parser.add_argument(
-        "--dataset_path",
-        type=str,
-        default="dataset",
-        help="Path to the already processed dataset.",
-    )
-    parser.add_argument(
-        "--output_dir", type=str, default=None, help="Output directory for the model."
-    )
+    parser.add_argument("--model_id", type=str, default="bert-large-uncased", help="Model id to use for training.")
+    parser.add_argument("--dataset_path", type=str, default="dataset", help="Path to the already processed dataset.")
+    parser.add_argument("--output_dir", type=str, default=None, help="Output directory for the model.")
     # add training hyperparameters for epochs, batch size, learning rate, and seed
-    parser.add_argument(
-        "--epochs", type=int, default=3, help="Number of epochs to train for."
-    )
-    parser.add_argument(
-        "--per_device_train_batch_size",
-        type=int,
-        default=8,
-        help="Batch size to use for training.",
-    )
-    parser.add_argument(
-        "--per_device_eval_batch_size",
-        type=int,
-        default=8,
-        help="Batch size to use for testing.",
-    )
-    parser.add_argument(
-        "--lr", type=float, default=5e-5, help="Learning rate to use for training."
-    )
-    parser.add_argument(
-        "--seed", type=int, default=42, help="Seed to use for training."
-    )
+    parser.add_argument("--epochs", type=int, default=3, help="Number of epochs to train for.")
+    parser.add_argument("--tensor_parallel_size", type=int, default=1, help="Number of tensor parallel groups.")
+    parser.add_argument("--per_device_train_batch_size", type=int, default=8, help="Batch size to use for training.")
+    parser.add_argument("--per_device_eval_batch_size", type=int, default=8, help="Batch size to use for testing.")
+    parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate to use for training.")
+    parser.add_argument("--seed", type=int, default=42, help="Seed to use for training.")
     parser.add_argument(
         "--bf16",
         type=bool,
@@ -88,9 +70,7 @@ metric = evaluate.load("f1")
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
     predictions = np.argmax(predictions, axis=1)
-    return metric.compute(
-        predictions=predictions, references=labels, average="weighted"
-    )
+    return metric.compute(predictions=predictions, references=labels, average="weighted")
 
 
 def training_function(args):
@@ -111,6 +91,9 @@ def training_function(args):
         id2label[str(i)] = label
 
     # Download the model from huggingface.co/models
+    # with lazy_load_for_parallelism(
+    #     tensor_parallel_size=args.tensor_parallel_size
+    # ):
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_id, num_labels=num_labels, label2id=label2id, id2label=id2label
     )
@@ -122,7 +105,7 @@ def training_function(args):
         overwrite_output_dir=True,
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=args.per_device_eval_batch_size,
+        # per_device_eval_batch_size=args.per_device_eval_batch_size,
         bf16=args.bf16,  # Use BF16 if available
         learning_rate=args.lr,
         num_train_epochs=args.epochs,
@@ -130,11 +113,11 @@ def training_function(args):
         logging_dir=f"{args.output_dir}/logs",
         logging_strategy="steps",
         logging_steps=10,
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
-        save_total_limit=2,
+        # evaluation_strategy="epoch",
+        # save_strategy="epoch", 
+        # save_total_limit=2,
         # push to hub parameters
-        report_to="tensorboard",
+        # report_to="tensorboard"
     )
 
     # Create Trainer instance
@@ -149,12 +132,11 @@ def training_function(args):
     # Start training
     trainer.train()
 
-    eval_res = trainer.evaluate(eval_dataset=eval_dataset)
-
-    print(eval_res)
+    # eval_res = trainer.evaluate(eval_dataset=eval_dataset)
+    # print(eval_res)
 
     # Save our tokenizer and create model card
-    tokenizer.save_pretrained(output_dir)
+    tokenizer.save_pretrained(args.output_dir)
 
 
 def main():

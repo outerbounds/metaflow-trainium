@@ -30,17 +30,18 @@ class ModelStoreConfig:
     s3_prefix: str = "bert-base-uncased/model"
     s3_checkpoints_key: str = "checkpoints"
     s3_experiments_key: str = "experiments"
+    s3_neuron_compiler_cache_key: str = "neuron-compiler-cache"
 
 
 @dataclass
 class TrainingConfig:
     bf16: bool = True
     learning_rate: float = 5e-5
-    per_device_train_batch_size: int = 16
-    tensor_parallel_size: int = 1
-    epochs: int = 3
-    logging_steps: int = 1
-    gradient_accumulation_steps: int = 1
+    per_device_train_batch_size: int = 4
+    # tensor_parallel_size: int = 1
+    epochs: int = 1
+    logging_steps: int = 10
+    gradient_accumulation_steps: int = 2
 
 
 @dataclass
@@ -86,9 +87,9 @@ training_env_config = {
 env_vars_config = {
     # "FI_EFA_USE_DEVICE_RDMA": "1",
     # "FI_PROVIDER": "efa",
-    "FI_EFA_FORK_SAFE": "1",
-    "CCOM_SOCKET_IFNAME": "eth0",
-    "MALLOC_ARENA_MAX": "64",  # host OOM
+    # "FI_EFA_FORK_SAFE": "1",
+    # "CCOM_SOCKET_IFNAME": "eth0",
+    # "MALLOC_ARENA_MAX": "64",  # host OOM
 }
 
 
