@@ -26,7 +26,7 @@ When satisfied, run `python config.py` and it will generate a `.yaml` file calle
 ## ▶️ Run the flow
 ### Training from scratch
 ```
-python flow.py run --config config.yaml
+python flow.py run --config-file config.yaml
 ```
 
 ### Resuming from a checkpoint
