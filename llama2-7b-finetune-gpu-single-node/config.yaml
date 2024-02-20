@@ -1,0 +1,28 @@
+data_store:
+  hf_dataset_name: databricks/databricks-dolly-15k
+  hf_dataset_split: train
+  local_path: data/databricks-dolly-15k
+  s3_prefix: databricks-dolly-15k
+tokenizer_store:
+  local_path: tokenizer.model
+  s3_prefix: philschmid/Llama-2-7b-hf/tokenizer
+model_store:
+  hf_model_name: philschmid/Llama-2-7b-hf
+  local_weights_path: model
+  local_checkpoints_path: model/checkpoints
+  s3_prefix: philschmid/Llama-2-7b-hf/model
+  s3_checkpoints_key: checkpoints
+  s3_experiments_key: experiments
+training:
+  bf16: true
+  learning_rate: 5.0e-05
+  per_device_train_batch_size: 8
+  gradient_checkpointing: true
+  num_train_epochs: 1
+  logging_steps: 1
+  gradient_accumulation_steps: 2
+  overwrite_output_dir: true
+deepspeed:
+  train_micro_batch_size_per_gpu: 8
+  zero_optimization:
+    stage: 1
