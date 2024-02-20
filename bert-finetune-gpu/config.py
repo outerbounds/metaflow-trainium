@@ -8,86 +8,63 @@ from metaflow import IncludeFile, Parameter, JSONType
 ### DATASET ###
 @dataclass
 class DataStoreConfig:
-    hf_dataset_name: str = "wikicorpus"
-    hf_dataset_config_name: str = "raw_en"
-    local_path: str = "data/wikicorpus_llama2_7B_tokenized_4k"
-    s3_prefix: str = "wikicorpus_llama2_7B_tokenized_4k"
-    block_size: int = 4096
+    hf_dataset_name: str = "philschmid/emotion"
+    hf_dataset_split: str = "train"
+    local_path: str = "data/twitter-emotion"
+    s3_prefix: str = "twitter-emotion"
 
 
 ### TOKENIZER ###
 @dataclass
 class TokenizerStoreConfig:
     local_path: str = "tokenizer.model"
-    s3_prefix: str = "llama2_7b/tokenizer"
+    s3_prefix: str = "bert-base-uncased/tokenizer"
 
 
 ### MODEL ###
 @dataclass
 class ModelStoreConfig:
+    hf_model_name: str = "bert-base-uncased"
     local_weights_path: str = "model"
     local_checkpoints_path: str = "model/checkpoints"
-    s3_prefix: str = "llama2_7b/model"
+    s3_prefix: str = "bert-base-uncased/model"
     s3_checkpoints_key: str = "checkpoints"
     s3_experiments_key: str = "experiments"
 
 
 @dataclass
-class ModelArchitectureConfig:
-    architectures: list = field(default_factory=lambda: ["LlamaForCausalLM"])
-    bos_token_id: int = 1
-    eos_token_id: int = 2
-    hidden_act: str = "silu"
-    hidden_size: int = 4096
-    initializer_range: float = 0.02
-    intermediate_size: int = 11008
-    max_position_embeddings: int = 2048
-    model_type: str = "llama"
-    num_attention_heads: int = 32
-    num_hidden_layers: int = 32
-    num_key_value_heads: int = 32
-    pad_token_id: int = 0
-    pretraining_tp: int = 1
-    rms_norm_eps: float = 1e-05
-    rope_scaling: Optional[str] = None
-    tie_word_embeddings: bool = False
-    torch_dtype: str = "float16"
-    transformers_version: str = "4.31.0"
-    use_cache: bool = True
-    vocab_size: int = 32000
-    sequence_parallel_enabled: bool = False
-    selective_checkpoint_enabled: bool = False
-    move_model_to_device: bool = True
-
-
-@dataclass
 class TrainingConfig:
-    tensor_parallelism_degree: int = 8 # NOTE: always keep this lower than num devices per node.
-    use_mix_precision: bool = True
-    use_zero_1: bool = True  # NOTE: 0 --> pure data parallelism, 1 --> ZeRO-1
-    global_batch_size: int = 1024
-    micro_batch_size: int = 1
-    learning_rate: float = 3.0e-4
-    sequence_length: int = 4096
-    do_pre_compilation: bool = True
-    pre_compilation_steps: int = 1
-    warmup_steps: int = 2
-    steps_this_run: int = 2
-    total_steps: int = 2
-    logging_interval: int = 1  # affects TensorBoard & CLI
-    checkpoint_frequency: int = 1
-    metrics_file: str = "metrics.json"
+    bf16: bool = False
+    learning_rate: float = 5e-5
+    per_device_train_batch_size: int = 16
+    gradient_checkpointing: bool = True
+    epochs: int = 1
+    logging_steps: int = 1
+    gradient_accumulation_steps: int = 1
+    overwrite_output_dir: bool = True
 
 
 @dataclass
-class TrainiumLlama2PretrainConfig:
+class ZeROConfig:
+    stage: int = 1
+    # offload_optimizer: dict = field(default_factory=lambda: {"device": "cpu"})
+
+
+@dataclass
+class DeepspeedConfig:
+    train_micro_batch_size_per_gpu: int = (
+        16  # NOTE: needs to match per_device_train_batch_size
+    )
+    zero_optimization: ZeROConfig = field(default_factory=ZeROConfig)
+
+
+@dataclass
+class BERTFinetuneConfig:
     data_store: DataStoreConfig = field(default_factory=DataStoreConfig)
     tokenizer_store: TokenizerStoreConfig = field(default_factory=TokenizerStoreConfig)
     model_store: ModelStoreConfig = field(default_factory=ModelStoreConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
-    model_architecture: ModelArchitectureConfig = field(
-        default_factory=ModelArchitectureConfig
-    )
+    deepspeed: DeepspeedConfig = field(default_factory=DeepspeedConfig)
 
 
 ### ENVIRONMENT ###
@@ -95,21 +72,22 @@ class TrainiumLlama2PretrainConfig:
 # for @step cache_dataset in flow.py
 caching_env_config = {
     "transformers": "4.31.0",
+    "evaluate": "0.4.1",
     "regex": "2023.12.25",
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0", 
+    "omegaconf": "2.3.0",
 }
 
 
 @dataclass
 class CachingEnvironmentConfig:
-    batch_enabled: bool = False # NOTE: Turn this on to tokenize data remotely.
+    batch_enabled: bool = False  # NOTE: Turn this on to tokenize data remotely.
     packages: Dict[str, str] = field(default_factory=lambda: caching_env_config)
 
 
-# Unused, baked in training step docker image
+# for @step tune_bert in flow.py
 training_env_config = {
     "transformers": "4.31.0",
     "regex": "2023.12.25",
@@ -117,51 +95,31 @@ training_env_config = {
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
     "protobuf": "3.20.0",
-    "omegaconf": "2.3.0", 
+    "omegaconf": "2.3.0",
 }
 
 
-# Derived from: https://github.com/aws-neuron/neuronx-distributed/blob/main/examples/training/llama2/tp_zero1_llama2_7b_hf_pretrain/tp_zero1_llama2_7b_hf_pretrain.sh
-NUM_RT_NEURON_CORES = 32  # trn1.32xlarge instance property.
 env_vars_config = {
-    "FI_EFA_USE_DEVICE_RDMA": "1",
-    "FI_PROVIDER": "efa",
-    "FI_EFA_FORK_SAFE": "1",
-    "CCOM_SOCKET_IFNAME": "eth0",
-    "MALLOC_ARENA_MAX": "64",  # host OOM
-    "XLA_USE_BF16": "1",
-    "TF_NUM_INTEROP_THREADS": "8192",
-    "PROCESSES_PER_NODE": "32",
-    "NEURON_CC_FLAGS": "--model-type transformer --distribution-strategy=llm-training --cache_dir=~/neuron_compile_cache/",
-    "NEURON_FUSE_SOFTMAX": "1",
-    "NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS": "3",  # Controls number of asynchronous execution requests to be supported. Reduces latency.
-    "NEURON_RT_NUM_CORES": str(NUM_RT_NEURON_CORES),
-    "NUM_NEURONCORES": str(NUM_RT_NEURON_CORES),
-    "TPU_NUM_DEVICES": str(NUM_RT_NEURON_CORES),
-    "TPU_CHIPS_PER_HOST_BOUNDS": str(NUM_RT_NEURON_CORES),
-    "NEURON_RT_ROOT_COMM_ID": "localhost:48620",
+    "NCCL_SOCKET_IFNAME": "eth0"
 }
 
 
 @dataclass
 class BatchJobConfig:
-    n_nodes: int = 2
-    n_trainium_devices: int = 16
-    n_cpu: int = 96
-    memory: int = 500000
-    n_efa_interfaces: int = 8
-    image: str = "public.ecr.aws/outerbounds/trainium:llama2"
-    job_queue: str = "oleg2-mztdpcvj-efa"
+    n_nodes: int = 1
+    n_gpu: int = 1
+    n_cpu: int = 8
+    memory: int = 24000
+    image: str = "public.ecr.aws/outerbounds/transformers:latest"
+    queue: str = "oleg2-mztdpcvj-gpu"
+    shared_memory: int = 1000
 
 
 @dataclass
-class TrainLlama2EnvConfig:
+class TuneBERTEnvConfig:
     packages: Dict[str, str] = field(default_factory=lambda: training_env_config)
     env_vars: Dict[str, str] = field(default_factory=lambda: env_vars_config)
     batch_job: BatchJobConfig = field(default_factory=BatchJobConfig)
-    continue_from_checkpoint_instructions: str = (
-        "To continue from a checkpoint, specify the checkpoint name in the --checkpoint parameter."
-    )
 
 
 @dataclass
@@ -169,9 +127,7 @@ class EnvironmentConfig:
     dataset_cache_step: CachingEnvironmentConfig = field(
         default_factory=CachingEnvironmentConfig
     )
-    train_llama2_step: TrainLlama2EnvConfig = field(
-        default_factory=TrainLlama2EnvConfig
-    )
+    tune_bert_step: TuneBERTEnvConfig = field(default_factory=TuneBERTEnvConfig)
 
 
 ### CONFIG HELPERS ###
@@ -225,9 +181,9 @@ class ConfigBase:
     Usage Example:
     --------
     ```
-    _CORE_CONFIG_CLASS = TrainiumLlama2PretrainConfig
+    _CORE_CONFIG_CLASS = BERTFinetuneConfig
     @property
-    def config(self) -> TrainiumLlama2PretrainConfig:
+    def config(self) -> BERTFinetuneConfig:
         return self._get_config()
     ```
     """
@@ -287,4 +243,4 @@ if __name__ == "__main__":
         ).upper()[0]
         if user_input != "Y":
             sys.exit("Exiting...")
-    create_config("config.yaml", TrainiumLlama2PretrainConfig)
+    create_config("config.yaml", BERTFinetuneConfig)

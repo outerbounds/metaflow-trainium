@@ -3,7 +3,7 @@ from functools import wraps
 import threading
 from datetime import datetime
 from metaflow import current
-from metaflow.cards import Table, Markdown, VegaChart, Image, Artifact
+from metaflow.cards import Table, Markdown, VegaChart, Image
 import time
 import shutil
 
@@ -22,7 +22,7 @@ from collections import namedtuple
 MEM_COLOR = "#0c64d6"
 GPU_COLOR = "#ff69b4"
 
-TS_FORMAT = "%Y/%m/%d %H:%M:%S"
+NVIDIA_TS_FORMAT = "%Y/%m/%d %H:%M:%S"
 
 
 DRIVER_VER = re.compile(b"Driver Version: (.+?) ")
@@ -30,53 +30,12 @@ CUDA_VER = re.compile(b"CUDA Version:(.*) ")
 
 MONITOR_FIELDS = [
     "timestamp",
-    "neuron_utilization",
+    "gpu_utilization",
     "memory_used",
     "memory_total",
 ]
 
-# MONITOR = """nvidia-smi --query-gpu=pci.bus_id,timestamp,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits -l {interval};"""
-
-CONFIG_FILENAME = "monitor.conf"
-MONITOR = """neuron-monitor --config-file {}""".format(CONFIG_FILENAME)
-CONFIG_TEMPLATE = {
-  "period": None,
-  "neuron_runtimes": [
-    {
-      "tag_filter": ".*",
-      "metrics": [
-        {
-          "type": "neuroncore_counters"
-        },
-        {
-          "type": "memory_used"
-        },
-        {
-          "type": "neuron_runtime_vcpu_usage"
-        },
-        {
-          "type": "execution_stats"
-        }
-      ]
-    }
-  ],
-  "system_metrics": [
-    {
-      "type": "vcpu_usage"
-    },
-    {
-      "type": "memory_info"
-    },
-    {
-       "type": "neuron_hw_counters"
-    }
-  ]
-}
-
-# TODO: move this code
-# with open(CONFIG_FILENAME, "w") as f:
-#     f.write(CONFIG_TEMPLATE)
-
+MONITOR = """nvidia-smi --query-gpu=pci.bus_id,timestamp,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits -l {interval};"""
 ProcessUUID = namedtuple("ProcessUUID", ["uuid", "start_time", "end_time"])
 
 
@@ -95,7 +54,6 @@ def _get_uuid(time_duration=600):
 class AsyncProcessManager:
     """
     This class is responsible for managing the nvidia SMI subprocesses
-    This class is responsible for managing the neuron monitor subprocess
     """
 
     processes = {
@@ -150,27 +108,27 @@ class AsyncProcessManager:
 def _parse_timestamp(timestamp):
     try:
         ts = timestamp.split(".")[0]
-        return datetime.strptime(ts, TS_FORMAT)
+        return datetime.strptime(ts, NVIDIA_TS_FORMAT)
     except ValueError:
         return None
 
 
-class NeuronMonitor:
+class GPUMonitor:
     """
-    The `NeuronMonitor` class is designed to monitor Neuron core usage.
+    The `GPUMonitor` class is designed to monitor GPU usage.
 
-    When an instance of `NeuronMonitor` is created, it initializes with a specified `interval` and `duration`.
-    The `duration` is the timeperiod it will run the neuron-monitor command for and the `interval` is the timeperiod between each reading.
-    The class exposes a `_monitor_update_thread` method which runs as a background thread that continuously updates the Neuron usage readings.
-    It will keep running until the `_finished` flag is set to `True`.
+    When an instance of `GPUMonitor` is created, it initializes with a specified `interval` and `duration`.
+    The `duration` is the timeperiod it will run the NVIDIA SMI command for and the `interval` is the timeperiod between each reading.
+    The class exposes a `_monitor_update_thread` method which runs as a background thread that continuously updates the GPU usage readings.
+    It will keep running unitl the `_finished` flag is set to `True`.
 
-    The class will statefully manage the the spawned neuron-monitor processes.
-    It will start a new neuron-monitor process after the current one has ran for the specified `duration`.
+    The class will statefully manage the the spawned NVIDI-SMI processes.
+    It will start a new NVIDI-SMI process after the current one has ran for the specified `duration`.
     At a time this class will only maintain readings for the `_current_process` and will have all the aggregated
     readings for the past processes stored in the `_past_readings` dictionary.
     When a process finishes completion, the readings are appended to the `_past_readings` dictionary and a new process is started.
 
-    If the caller of this class wishes to read the Neuron usage, they can call the `read` method which will return the readings in a dictionary format.
+    If the caller of this class wishes to read the GPU usage, they can call the `read` method which will return the readings in a dictionary format.
     The `read` method will aggregate the readings from the `_current_readings` and `_past_readings`.
     """
 
@@ -183,12 +141,7 @@ class NeuronMonitor:
     _past_readings = {}
 
     def __init__(self, interval=1, duration=300) -> None:
-
-        with open(CONFIG_FILENAME, "w") as f:
-            CONFIG_TEMPLATE['period'] = f"{interval}s"
-            json.dump(CONFIG_TEMPLATE, f)
-
-        self._tempdir = TemporaryDirectory(prefix="neuron_card_monitor", dir="./")
+        self._tempdir = TemporaryDirectory(prefix="gpu_card_monitor", dir="./")
         self._interval = interval
         self._duration = duration
         self._finished = False
@@ -197,15 +150,15 @@ class NeuronMonitor:
     def _current_file(self):
         if self._current_process is None:
             return None
-        return os.path.join(self._tempdir.name, self._current_process.uuid + ".log")
+        return os.path.join(self._tempdir.name, self._current_process.uuid + ".csv")
 
     def get_file_name(self, uuid):
-        return os.path.join(self._tempdir.name, uuid + ".log")
+        return os.path.join(self._tempdir.name, uuid + ".csv")
 
     def create_new_monitor(self):
         uuid = _get_uuid(self._duration)
         file = open(self.get_file_name(uuid.uuid), "w")
-        cmd = MONITOR #.format(interval=self._interval, time_duration=self._duration)
+        cmd = MONITOR.format(interval=self._interval, time_duration=self._duration)
         AsyncProcessManager.spawn(uuid.uuid, ["bash", "-c", cmd], file)
         self._started_processes.append(uuid)
         self._current_process = uuid
@@ -234,52 +187,37 @@ class NeuronMonitor:
         all_readings = []
         if self._current_file is None:
             return None
-
-        # Extract everything from the log File and store it in a list of dictionaries
-        # all_fields = ["neuron_id"] + MONITOR_FIELDS
+        # Extract everything from the CVS File and store it in a list of dictionaries
+        all_fields = ["gpu_id"] + MONITOR_FIELDS
         with open(self._current_file, "r") as _monitor_out:
             for line in _monitor_out.readlines():
-                data = json.loads(line)
-                if len(data.keys()) == 4: # TODO: hard-coding magic number for now, based on neuron-monitor docs.
+                data = {}
+                fields = [f.strip() for f in line.split(",")]
+                if len(fields) == len(all_fields):
+                    # strip subsecond resolution from timestamps that doesn't align across devices
+                    for idx, _f in enumerate(all_fields):
+                        data[_f] = fields[idx]
                     all_readings.append(data)
                 else:
                     # expect that the last line may be truncated
                     break
 
-        # Extract 'neuron_utilization' from the readings, organized by device_id
+        # Convert to dictionary format
         devdata = {}
         for reading in all_readings:
-            reading["timestamp"] = datetime.now().strftime(TS_FORMAT)
-            if len(reading['neuron_runtime_data']) > 0:
-            
-                report = reading['neuron_runtime_data'][0]['report']
-                for device_id in report['neuroncore_counters']['neuroncores_in_use'].keys():
-                    if device_id not in devdata:
-                        devdata[device_id] = {}
+            gpu_id = reading["gpu_id"]
+            if "timestamp" not in reading:
+                continue
+            if _parse_timestamp(reading["timestamp"]) is None:
+                continue
+            reading["timestamp"] = reading["timestamp"].split(".")[0]
+            if gpu_id not in devdata:
+                devdata[gpu_id] = {}
 
-                        field = 'neuron_utilization'
-                        if field not in devdata[device_id]:
-                            devdata[device_id][field] = []
-                        devdata[device_id][field].append(report['neuroncore_counters']['neuroncores_in_use'][device_id]['neuroncore_utilization'])
-
-                        field = 'memory_used'
-                        if field not in devdata[device_id]:
-                            devdata[device_id][field] = []
-                        neuroncore_memory_usage = report['memory_used']['neuron_runtime_used_bytes']['usage_breakdown']['neuroncore_memory_usage'][device_id]
-                        devdata[device_id][field].append(sum(neuroncore_memory_usage.values()))
-
-                        field = 'memory_total'
-                        if field not in devdata[device_id]:
-                            devdata[device_id][field] = [] 
-                        # Each device has 32GB of memory, but the neuron monitor reports memory for each core. 
-                        # Assuming 2 cores per device, we compute a total memory for each core.
-                        devdata[device_id][field].append(32 / 2 * 1024 * 1024 * 1024) 
-                            
-                        field = 'timestamp'
-                        if field not in devdata[device_id]:
-                            devdata[device_id][field] = []
-                        devdata[device_id]["timestamp"].append(reading["timestamp"])
-
+            for i, field in enumerate(MONITOR_FIELDS):
+                if field not in devdata[gpu_id]:
+                    devdata[gpu_id][field] = []
+                devdata[gpu_id][field].append(reading[field])
         return devdata
 
     def _update_readings(self):
@@ -303,26 +241,19 @@ class NeuronMonitor:
     def _make_full_reading(current, past):
         if current is None:
             return past
-        for device_id in current:
-            if device_id not in past:
-                past[device_id] = {}
+        for gpu_id in current:
+            if gpu_id not in past:
+                past[gpu_id] = {}
             for field in MONITOR_FIELDS:
-                if field not in past[device_id]:
-                    past[device_id][field] = []
-                past[device_id][field].extend(current[device_id][field])
+                if field not in past[gpu_id]:
+                    past[gpu_id][field] = []
+                past[gpu_id][field].extend(current[gpu_id][field])
         return past
 
     def read(self):
         return self._make_full_reading(
             self._current_readings, json.loads(json.dumps(self._past_readings))
         )
-
-    def read_hardware_info(self):
-        with open(self._current_file, "r") as _monitor_out:
-            for line in _monitor_out.readlines():
-                data = json.loads(line)
-                if "neuron_hardware_info" in data:
-                    return data["neuron_hardware_info"]
 
     def _update_past_readings(self):
         if self._current_readings is None:
@@ -353,14 +284,14 @@ def _update_utilization(results, md_dict):
     for device, data in results["profile"].items():
         if device not in md_dict:
             print(
-                "Device %s not found in the Neuron monitor card layout. Skipping..." % device,
+                "Device %s not found in the GPU card layout. Skipping..." % device,
                 file=sys.stderr,
             )
             continue
-        md_dict[device]["neuron"].update(
-            "%2.1f%%" % max(map(float, data["neuron_utilization"]))
+        md_dict[device]["gpu"].update(
+            "%2.1f%%" % max(map(float, data["gpu_utilization"]))
         )
-        md_dict[device]["memory"].update("%dMB" % max(map(lambda x: float(x) / (1024 * 1024), data["memory_used"])))
+        md_dict[device]["memory"].update("%dMB" % max(map(float, data["memory_used"])))
 
 
 def _update_charts(results, md_dict):
@@ -368,14 +299,14 @@ def _update_charts(results, md_dict):
         try:
             if device not in md_dict:
                 continue
-            neuron_plot, mem_plot, ts_range = profile_plots(
+            gpu_plot, mem_plot, ts_range = profile_plots(
                 device,
                 data["timestamp"],
-                data["neuron_utilization"],
+                data["gpu_utilization"],
                 data["memory_used"],
                 data["memory_total"],
             )
-            md_dict[device]["neuron"].update(neuron_plot)
+            md_dict[device]["gpu"].update(gpu_plot)
             md_dict[device]["memory"].update(mem_plot)
             md_dict[device]["reading_duration"].update(_get_ts_range(ts_range))
         except ValueError as e:
@@ -384,87 +315,134 @@ def _update_charts(results, md_dict):
 
 
 # This code is adapted from: https://github.com/outerbounds/monitorbench
-class NeuronProfiler:
+class GPUProfiler:
     def __init__(self, interval=1, monitor_batch_duration=200):
-        self.error = False
-        self._monitor = NeuronMonitor(interval=interval, duration=monitor_batch_duration)
-        self._monitor_thread = threading.Thread(
-            target=self._monitor._monitor_update_thread, daemon=True
-        )
-        self._monitor_thread.start()
-        self._interval = interval 
-
-        time.sleep(1)
-        self.hardware_info_dict = self._monitor.read_hardware_info()
-        self.devices = [str(i) for i in range(
-            int(self.hardware_info_dict["neuron_device_count"]) *
-            int(self.hardware_info_dict["neuroncore_per_device_count"])
-        )]
+        self.driver_ver, self.cuda_ver, self.error = self._read_versions()
+        (
+            self.interconnect_data,
+            self.interconnect_legend,
+        ) = self._read_multi_gpu_interconnect()
+        if self.error:
+            self.devices = []
+            return
+        else:
+            self.devices = self._read_devices()
+            self._monitor = GPUMonitor(
+                interval=interval, duration=monitor_batch_duration
+            )
+            self._monitor_thread = threading.Thread(
+                target=self._monitor._monitor_update_thread, daemon=True
+            )
+            self._monitor_thread.start()
+            self._interval = interval
 
         self._card_comps = {"max_utilization": {}, "charts": {}, "reading_duration": {}}
         self._card_created = False
 
     def finish(self):
-        ret = {}
+        ret = {
+            "error": self.error,
+            "cuda_version": self.cuda_ver,
+            "driver_version": self.driver_ver,
+        }
         if self.error:
             return ret
         else:
             ret["devices"] = self.devices
             ret["profile"] = self._monitor.read()
+            ret["interconnect"] = {
+                "data": self.interconnect_data,
+                "legend": self.interconnect_legend,
+            }
             self._monitor.cleanup()
             return ret
 
     def _make_reading(self):
-        ret = {}
+        ret = {
+            "error": self.error,
+            "cuda_version": self.cuda_ver,
+            "driver_version": self.driver_ver,
+        }
         if self.error:
             return ret
         else:
             ret["devices"] = self.devices
             ret["profile"] = self._monitor.read()
+            ret["interconnect"] = {
+                "data": self.interconnect_data,
+                "legend": self.interconnect_legend,
+            }
             return ret
 
     def _update_card(self):
         if len(self.devices) == 0:
-            current.card["neuron_monitor"].clear()
-            current.card["neuron_monitor"].append(
-                Markdown("## Neuron monitor failed: %s" % self.error)
+            current.card["gpu_profile"].clear()
+            current.card["gpu_profile"].append(
+                Markdown("## GPU profile failed: %s" % self.error)
             )
-            current.card["neuron_monitor"].refresh()
+            current.card["gpu_profile"].refresh()
 
             return
 
         while True:
             readings = self._make_reading()
             if readings is None:
-                print("Neuron monitor readings are none", file=sys.stderr)
+                print("GPU Profiler readings are none", file=sys.stderr)
                 time.sleep(self._interval)
                 continue
             _update_utilization(readings, self._card_comps["max_utilization"])
             _update_charts(readings, self._card_comps["charts"])
-            current.card["neuron_monitor"].refresh()
+            current.card["gpu_profile"].refresh()
             time.sleep(self._interval)
 
     def _setup_card(self, artifact_name):
         from metaflow import current
 
         results = self._make_reading()
-        els = current.card["neuron_monitor"]
+        els = current.card["gpu_profile"]
+
+        def _drivers():
+            els.append(Markdown("## Drivers"))
+            els.append(
+                Table(
+                    [[results["cuda_version"], results["driver_version"]]],
+                    headers=["NVidia driver version", "CUDA version"],
+                )
+            )
 
         def _devices():
             els.append(Markdown("## Devices"))
-            els.append(Artifact({"devices": self.hardware_info_dict}))
+            rows = [
+                [d["device_id"], d["name"], d["memory"]] for d in results["devices"]
+            ]
+            els.append(Table(rows, headers=["Device ID", "Device type", "GPU memory"]))
+
+        def _interconnect():
+            if results["interconnect"]["data"] and results["interconnect"]["legend"]:
+                els.append(Markdown("## Interconnect"))
+                interconnect_data = results["interconnect"]["data"]
+                rows = list(interconnect_data.values())
+                rows = [list(transpose_row) for transpose_row in list(zip(*rows))]
+                els.append(Table(rows, headers=list(interconnect_data.keys())))
+                els.append(Markdown("#### Legend"))
+                els.append(
+                    Table(
+                        [list(results["interconnect"]["legend"].values())],
+                        headers=list(results["interconnect"]["legend"].keys()),
+                    )
+                )
 
         def _utilization():
             els.append(Markdown("## Maximum utilization"))
             rows = {}
-            for device_id in results["devices"]:
-                rows[device_id] = {
-                    "neuron": Markdown("0%"),
+            for d in results["devices"]:
+                rows[d["device_id"]] = {
+                    "gpu": Markdown("0%"),
                     "memory": Markdown("0MB"),
                 }
             _rows = [[Markdown(k)] + list(v.values()) for k, v in rows.items()]
             els.append(
-                Table(data=_rows, headers=["Device ID", "Max neuron core %", "Max memory"])
+                Table(data=_rows, headers=["Device ID", "Max GPU %", "Max memory"])
             )
             els.append(
                 Markdown(f"Detailed data saved in an artifact `{artifact_name}`")
@@ -472,41 +450,120 @@ class NeuronProfiler:
             return rows
 
         def _plots():
-            els.append(Markdown("## Neuron core utilization and memory usage over time"))
+            els.append(Markdown("## GPU utilization and memory usage over time"))
 
             rows = {}
-            for device_id in results["devices"]:
-                neuron_plot, mem_plot, ts_range = profile_plots(
-                    device_id, [], [], [], []
+            for d in results["devices"]:
+                gpu_plot, mem_plot, ts_range = profile_plots(
+                    d["device_id"], [], [], [], []
                 )
-                rows[device_id] = {
-                    "neuron": VegaChart(neuron_plot),
+                rows[d["device_id"]] = {
+                    "gpu": VegaChart(gpu_plot),
                     "memory": VegaChart(mem_plot),
                     "reading_duration": Markdown(_get_ts_range(ts_range)),
                 }
             for k, v in rows.items():
-                els.append(Markdown("### Neuron Utilization for device : %s" % k))
+                els.append(Markdown("### GPU Utilization for device : %s" % k))
                 els.append(v["reading_duration"])
                 els.append(
                     Table(
                         data=[
-                            [Markdown("Neuron Utilization"), v["neuron"]],
+                            [Markdown("GPU Utilization"), v["gpu"]],
                             [Markdown("Memory usage"), v["memory"]],
                         ]
                     )
                 )
             return rows
 
+        _drivers()
         _devices()
+        _interconnect()
         self._card_comps["max_utilization"] = _utilization()
         self._card_comps["charts"] = _plots()
 
+    def _read_versions(self):
+        def parse(r, s):
+            return r.search(s).group(1).strip().decode("utf-8")
 
-class neuron_monitor:
+        try:
+            out = check_output(["nvidia-smi"])
+            return parse(DRIVER_VER, out), parse(CUDA_VER, out), None
+        except FileNotFoundError:
+            return None, None, "nvidia-smi not found"
+        except AttributeError:
+            return None, None, "nvidia-smi output is unexpected"
+        except:
+            return None, None, "nvidia-smi error"
+
+    def _read_devices(self):
+        out = check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,pci.bus_id,memory.total",
+                "--format=csv,noheader",
+            ]
+        )
+        return [
+            dict(
+                zip(("name", "device_id", "memory"), (x.strip() for x in l.split(",")))
+            )
+            for l in out.decode("utf-8").splitlines()
+        ]
+
+    def _read_multi_gpu_interconnect(self):
+        """
+        parse output of `nvidia-smi tomo -m`, such as this sample:
+
+            GPU0    GPU1    CPU Affinity    NUMA Affinity
+            GPU0     X      NV2     0-23            N/A
+            GPU1    NV2      X      0-23            N/A
+
+        returns two dictionaries describing multi-GPU topology:
+            data: {index: [GPU0, GPU1, ...], GPU0: [X, NV2, ...], GPU1: [NV2, X, ...], ...}
+            legend_items: {X: 'Same PCI', NV2: 'NVLink 2', ...}
+        """
+        try:
+            import re
+
+            ansi_escape = re.compile(r"(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]")
+
+            out = check_output(["nvidia-smi", "topo", "-m"])
+            rows = out.decode("utf-8").split("\n")
+
+            header = ansi_escape.sub("", rows[0]).split("\t")[1:]
+            data = {}
+            data["index"] = []
+            data |= {k: [] for k in header}
+
+            for i, row in enumerate(rows[1:]):
+                row = ansi_escape.sub("", row).split()
+                if len(row) == 0:
+                    continue
+                if row[0].startswith("GPU"):
+                    data["index"].append(row[0])
+                    for key, val in zip(header, row[1:]):
+                        data[key].append(val)
+                elif row[0].startswith("Legend"):
+                    break
+
+            legend_items = {}
+            for legend_row in rows[i:]:
+                if legend_row == "" or legend_row.startswith("Legend"):
+                    continue
+                res = legend_row.strip().split(" = ")
+                legend_items[res[0].strip()] = res[1].strip()
+
+            return data, legend_items
+
+        except:
+            return None, None
+
+
+class gpu_profile:
     def __init__(
         self,
         include_artifacts=True,
-        artifact_prefix="neuron_monitor_",
+        artifact_prefix="gpu_profile_",
         interval=1,
     ):
         self.include_artifacts = include_artifacts
@@ -516,21 +573,21 @@ class neuron_monitor:
     def __call__(self, f):
         @wraps(f)
         def func(s):
-            prof = NeuronProfiler(interval=self.interval)
+            prof = GPUProfiler(interval=self.interval)
             if self.include_artifacts:
-                setattr(s, self.artifact_prefix + "num_neuron", len(prof.devices))
+                setattr(s, self.artifact_prefix + "num_gpus", len(prof.devices))
 
-            current.card["neuron_monitor"].append(
-                Markdown("# Neuron monitor for `%s`" % current.pathspec)
+            current.card["gpu_profile"].append(
+                Markdown("# GPU profile for `%s`" % current.pathspec)
             )
-            current.card["neuron_monitor"].append(
+            current.card["gpu_profile"].append(
                 Markdown(
                     "_Started at: %s_"
                     % datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S %z")
                 )
             )
             prof._setup_card(self.artifact_prefix + "data")
-            current.card["neuron_monitor"].refresh()
+            current.card["gpu_profile"].refresh()
             update_thread = threading.Thread(target=prof._update_card, daemon=True)
             update_thread.start()
 
@@ -546,7 +603,7 @@ class neuron_monitor:
 
         from metaflow import card
 
-        return card(type="blank", id="neuron_monitor", refresh_interval=self.interval)(
+        return card(type="blank", id="gpu_profile", refresh_interval=self.interval)(
             func
         )
 
@@ -598,21 +655,21 @@ def translate_to_vegalite(
     return vega_lite_spec
 
 
-def profile_plots(device_id, ts, neuron, mem_used, mem_total):
-    tstamps = [datetime.strptime(t, TS_FORMAT) for t in ts]
-    neuron = [i / 100 for i in list(map(float, neuron))]
+def profile_plots(device_id, ts, gpu, mem_used, mem_total):
+    tstamps = [datetime.strptime(t, NVIDIA_TS_FORMAT) for t in ts]
+    gpu = [i / 100 for i in list(map(float, gpu))]
     mem = [float(used) / float(total) for used, total in zip(mem_used, mem_total)]
     time_stamp_range = ""
     if len(tstamps) > 1:
-        max_time = max(tstamps).strftime(TS_FORMAT)
-        min_time = min(tstamps).strftime(TS_FORMAT)
+        max_time = max(tstamps).strftime(NVIDIA_TS_FORMAT)
+        min_time = min(tstamps).strftime(NVIDIA_TS_FORMAT)
         time_stamp_range = "%s to %s" % (min_time, max_time)
 
-    neuron_plot = translate_to_vegalite(
+    gpu_plot = translate_to_vegalite(
         tstamps,
-        neuron,
-        "Neuron core utilization",
-        "Neuron core utilization",
+        gpu,
+        "GPU utilization",
+        "GPU utilization",
         "device: %s" % device_id,
         line_color=GPU_COLOR,
         percentage_format=True,
@@ -626,11 +683,11 @@ def profile_plots(device_id, ts, neuron, mem_used, mem_total):
         line_color=MEM_COLOR,
         percentage_format=True,
     )
-    return neuron_plot, mem_plot, time_stamp_range
+    return gpu_plot, mem_plot, time_stamp_range
 
 
 if __name__ == "__main__":
-    prof = NeuronProfiler(monitor_batch_duration=10)
+    prof = GPUProfiler(monitor_batch_duration=10)
 
     def _write_json_file(data, filename):
         with open(filename, "w") as f:
@@ -640,6 +697,6 @@ if __name__ == "__main__":
 
     for i in range(15):
         time.sleep(1)
-        _write_json_file(prof._monitor.read(), "neuron_monitor.json")
+        _write_json_file(prof._monitor.read(), "gpu_profile.json")
 
     print(json.dumps(prof.finish()))

@@ -1,10 +1,18 @@
 import os
 import sys
 import json
-from multiprocessing import Pool, TimeoutError
-from tempfile import NamedTemporaryFile
 
-from metaflow import FlowSpec, step, batch, torchrun, current, S3, environment, Parameter, card
+from metaflow import (
+    FlowSpec,
+    step,
+    batch,
+    torchrun,
+    current,
+    S3,
+    environment,
+    Parameter,
+    card,
+)
 from metaflow.plugins.parallel_decorator import UBF_CONTROL
 
 from config import ConfigBase, EnvironmentConfig, TrainiumLlama2PretrainConfig
@@ -19,7 +27,12 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
 
     # Use the checkpoint parameter in the Metaflow run command to resume training from a checkpoint.
     # The value must be a valid checkpoint key in the model_store, currently set up to be indexed my the Metaflow run_id.
-    remote_checkpoint_id = Parameter(name="checkpoint", default=None, type=str, help="checkpoint to resume training from")
+    remote_checkpoint_id = Parameter(
+        name="checkpoint",
+        default=None,
+        type=str,
+        help="checkpoint to resume training from",
+    )
 
     _CORE_CONFIG_CLASS = TrainiumLlama2PretrainConfig
 
@@ -55,7 +68,10 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         if not store.already_exists():
             store.download_from_huggingface(self.config.data_store)
             store.upload(self.config.data_store.local_path)
-        self.next(self.train_llama2, num_parallel=environment_config.train_llama2_step.batch_job.n_nodes)
+        self.next(
+            self.train_llama2,
+            num_parallel=environment_config.train_llama2_step.batch_job.n_nodes,
+        )
 
     @environment(vars=environment_config.train_llama2_step.env_vars)
     @batch(
@@ -65,9 +81,9 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         memory=environment_config.train_llama2_step.batch_job.memory,
         image=environment_config.train_llama2_step.batch_job.image,
         queue=environment_config.train_llama2_step.batch_job.job_queue,
-        use_tmpfs=True, # size is 1/2 of `memory` by default.
+        use_tmpfs=True,  # size is 1/2 of `memory` by default.
     )
-    @neuron_monitor(interval=5)
+    @neuron_monitor(interval=1)
     @torchrun
     @step
     def train_llama2(self):
@@ -87,7 +103,9 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
 
         data_dir = make_path(self.config.data_store.local_path)
         model_path = make_path(self.config.model_store.local_weights_path)
-        checkpoint_dir = make_path(self.config.model_store.local_checkpoints_path, use_tmpfs=True)
+        checkpoint_dir = make_path(
+            self.config.model_store.local_checkpoints_path, use_tmpfs=True
+        )
         metrics_file = make_path(self.config.training.metrics_file, make_dir=False)
 
         # Download tokenized data.
@@ -98,16 +116,18 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         model_store = self._get_model_store()
         resume_checkpoint_arg = {}
         if self.remote_checkpoint_id is not None:
-            # Note: This downloads all checkpoints from the specified run_id.
+            # NOTE: This downloads all checkpoints from the specified run_id.
             model_store.download(
                 download_path=checkpoint_dir,
                 store_key=os.path.join(
-                    self.config.model_store.s3_checkpoints_key, 
+                    self.config.model_store.s3_checkpoints_key,
                     self.remote_checkpoint_id,
-                    current.parallel.node_index
-                )
+                    current.parallel.node_index,
+                ),
             )
-            resume_checkpoint_arg['resume_ckpt'] = None # NOTE: value None tells current.torch.run to use store_true style command line arg
+            resume_checkpoint_arg["resume_ckpt"] = (
+                None  # NOTE: value None tells current.torch.run to use store_true style command line arg
+            )
 
         # Write config.json used by transformers model. If desired, you could alternatively package a hard-coded config.json in the Docker image.
         model_arch_config = OmegaConf.to_container(self.config.model_architecture)
@@ -116,18 +136,20 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
 
         # Configure entrypoint args.
         world_size = (
-            environment_config.train_llama2_step.batch_job.n_nodes 
-            * environment_config.train_llama2_step.batch_job.n_trainium_devices 
-            * 2 # 2 cores per device
+            environment_config.train_llama2_step.batch_job.n_nodes
+            * environment_config.train_llama2_step.batch_job.n_trainium_devices
+            * 2  # cores per device
         )
-        data_parallelism_degree = world_size / self.config.training.tensor_parallelism_degree
+        data_parallelism_degree = (
+            world_size / self.config.training.tensor_parallelism_degree
+        )
         accumulation_steps = int(
             self.config.training.global_batch_size
             / self.config.training.micro_batch_size
             / data_parallelism_degree
         )
         entrypoint_args = {
-            "model_path": model_path, # TODO: rel path did not to work, so using abs path.  
+            "model_path": model_path,
             "data_dir": data_dir,
             "tensor_parallel_size": self.config.training.tensor_parallelism_degree,
             "batch_size": self.config.training.micro_batch_size,
@@ -143,7 +165,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             **resume_checkpoint_arg,
             "checkpoint_dir": checkpoint_dir,
             "metrics_file": metrics_file,
-            "force_checkpoint": None, # NOTE: Checkpoints every step no matter what, included for testing.
+            # "force_checkpoint": None, # NOTE: Checkpoints every step no matter what, included for testing.
         }
         if self.config.training.use_mix_precision:
             entrypoint_args["use_mix_precision"] = None
@@ -154,19 +176,19 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         current.torch.run(
             entrypoint="tp_zero1_llama2_7b_hf_pretrain.py",
             entrypoint_args=entrypoint_args,
-            master_port="41000" # NOTE: 41000 is hardcoded in reserved ports in the Dockerfile.
+            master_port="41000",  # NOTE: 41000 is hardcoded in reserved ports in the Dockerfile.
         )
 
-        # Upload checkpoint artifacts for use in continued pre-training or next stage (e.g., instruction tuning).
+        # Push checkpoints for use in continued pre-training or next stage (e.g., instruction tuning).
         model_store.upload(
             local_path=checkpoint_dir,
             store_key=os.path.join(
-                self.config.model_store.s3_checkpoints_key, 
+                self.config.model_store.s3_checkpoints_key,
                 current.run_id,
-                str(current.parallel.node_index)
-            )
+                str(current.parallel.node_index),
+            ),
         )
-        
+
         if current.parallel.node_index == 0:
 
             # Push TensorBoard logs to S3.
@@ -174,12 +196,11 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             model_store.upload(
                 local_path=experiment_logs,
                 store_key=os.path.join(
-                    self.config.model_store.s3_experiments_key, 
-                    current.run_id
-                )
+                    self.config.model_store.s3_experiments_key, current.run_id
+                ),
             )
-            
-            # Store metrics file
+
+            # Store metrics file.
             self.metrics_json = json.load(open(metrics_file))
 
         self.next(self.join)

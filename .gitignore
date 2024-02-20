@@ -1,0 +1,4 @@
+.micromamba
+*/.metaflow
+*/data
+*/__pycache__
