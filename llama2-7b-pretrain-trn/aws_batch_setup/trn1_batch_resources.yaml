@@ -20,6 +20,8 @@ Mappings:
   Trn1AzMap:
     us-east-1:
       AZID: use1-az6
+    us-east-2:
+      AZID: use2-az3
     us-west-2:
       AZID: usw2-az4
 
