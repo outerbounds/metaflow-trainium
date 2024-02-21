@@ -14,9 +14,6 @@ If you have not previous deployed the Metaflow stack in AWS, please follow these
 - Click "Next" through the subsequent screens, then "Submit" to begin stack creation
 - When the stack has been deployed, go to the "Outputs" tab. This tab shows the values that you will need when configuring Metaflow on your instance in subsequent steps
 
-## Create AWS Batch resources
-TODO
-
 ## Create an ECR repo for your Neuron-enabled Docker image
 Login to the AWS console and create a new ECR repo called `metaflow_trn1` in your desired region.
 
@@ -32,7 +29,10 @@ sudo usermod -a -G docker ec2-user && newgrp docker
 - Install AWS CLI (Note: this comes pre-installed on Amazon Linux)
 - Run `aws configure` to add your AWS credentials to the instance (or attach a suitable IAM role to the instance)
 - Git clone this repo to your instance
-- `cd metaflow-trainium/llama2-7b-pretrain-trn/docker`
+```
+git clone https://github.com/5cp/metaflow-trainium.git -b aws_testing
+cd metaflow-trainium/llama2-7b-pretrain-trn/docker
+```
 - From the `./docker` directory, run the following commands to build the Docker image and push it to your ECR repo 
 ```
 export AWS_ACCT=123412341234   # <- replace with your AWS account number
@@ -54,6 +54,9 @@ pip3 install git+https://github.com/outerbounds/metaflow-torchrun.git@dff2b73c02
 ```
 - Next, run `metaflow configure aws`. When prompted, enter the appropriate values from the Metaflow CloudFormation stack's Outputs tab.
 **Note:** please skip the optional `METAFLOW_SERVICE_INTERNAL_URL` value, as it will cause issues if your Metaflow resources and Batch resources use different VPCs.
+
+## Create AWS Batch resources
+TODO
 
 # Developing
 
