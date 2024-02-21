@@ -3,7 +3,7 @@
 AWS Trainium is currently supported in us-east-1, us-east-2, and us-west-2. In the following steps, please make sure that you are working in one of these supported regions.
 
 ## 🚧 Deploy Metaflow stack in AWS
-If you have not previous deployed the Metaflow stack in AWS, please follow these steps to download and deploy the CloudFormation template:
+If you have not previously deployed the Metaflow stack in AWS, please follow these steps to download and deploy the CloudFormation template:
 - Download the template [HERE](https://github.com/outerbounds/metaflow-tools/blob/master/aws/cloudformation/metaflow-cfn-template.yml)
 - Open the AWS console, and search for "CloudFormation"
 - Choose "Create Stack" -> "With new resources (standard)"
