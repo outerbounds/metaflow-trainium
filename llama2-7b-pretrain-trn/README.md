@@ -15,7 +15,7 @@ If you have not previous deployed the Metaflow stack in AWS, please follow these
 - When the stack has been deployed, go to the "Outputs" tab. This tab shows the values that you will need when configuring Metaflow on your instance in subsequent steps
 
 ## Create an ECR repo for your Neuron-enabled Docker image
-Login to the AWS console and create a new ECR repo called `metaflow_trn1` in your desired region.
+- Open the AWS console, search for "Elastic Container Registry", and create a new ECR repo called `metaflow_trn1` in your desired region.
 
 ## 🐳 Make the Docker image for training
 The Docker image should be built using an x86_64-based Linux EC2 instance (ex: a c5.xlarge running Amazon Linux)
