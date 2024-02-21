@@ -48,7 +48,7 @@ docker push ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:latest
 python3 -m venv metaflow_venv
 . ./metaflow_venv/bin/activate
 pip3 install -U pip
-pip3 install -r omegaconf
+pip3 install metaflow omegaconf
 pip3 install git+https://github.com/outerbounds/metaflow-torchrun.git@dff2b73c0251919f84c2ebb0ece6475b8d9bd0a9 
 ```
 - Next, run `metaflow configure aws`. When prompted, enter the appropriate values from the Metaflow CloudFormation stack's Outputs tab.
