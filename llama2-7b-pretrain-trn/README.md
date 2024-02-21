@@ -39,6 +39,7 @@ cd metaflow-trainium/llama2-7b-pretrain-trn/docker
 ```
 export AWS_ACCT=123412341234   # <- replace with your AWS account number
 export REGION=us-west-2        # <- replace with your desired AWS region
+
 ./login_ecr.sh
 docker build . -t ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:latest
 docker push ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:latest 
