@@ -41,7 +41,6 @@ export REGION=us-west-2        # <- replace with your desired AWS region
 docker build . -t ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:latest
 docker push ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:latest 
 ```
-- In `config.py`, change the docker image in the `BatchJobConfig` to match your image's location in ECR. Also update the Job Queue to your desired trn1 job queue in AWS Batch.
 
 ## Install and configure Metaflow
 - First create a new virtual environment and install Metaflow & related packages:
@@ -61,7 +60,8 @@ TODO
 # Developing
 
 ## ⚙️ Configure the run
-Look at the options in `config.py` to familiarize with the project.
+Look at the options in `config.py` to familiarize yourself with the project.
+In `config.py`, change the docker image in the `BatchJobConfig` to match your image's location in ECR. Also update the Job Queue to your desired trn1 job queue in AWS Batch.
 When satisfied, run `python config.py` and it will generate a `.yaml` file called `config.yaml`.
 
 ## ▶️ Run the flow
