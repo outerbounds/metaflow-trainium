@@ -8,14 +8,31 @@ On the Neuron device side, Metaflow takes care of this.
 
 > Follow this Terraform template. 
 
+## Create an ECR repo for your Neuron-enabled Docker image
+Login to the AWS console and create a new ECR repo called `metaflow_trn1` in your desired region.
+
 ## 🐳 Make the Docker image for training
-- Make `x86_64`-based EC2 image, we suggest using a `C5.xlarge` instance.
-- Install Docker
-- Install AWS CLI
-- From the `./docker` directory, make the docker image `docker build . -t trainium`.
-    - Log in to AWS ECR `aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $BASE_IMAGE_REPO` to pull the base image.
-- Go to the ECR registry in your AWS account where you want to push the image to ECR, login from the EC2 instance, and push the image you just made with whatever tag you'd like.
-- In `config.py`, change the docker image in the `BatchJobConfig` to match your image's location.
+The Docker image should be built using an x86_64-based Linux EC2 instance (ex: a c5.xlarge running Amazon Linux)
+- Launch and login to your EC2 instance
+- Install and start Docker
+```
+sudo yum install docker -y
+sudo service docker start
+sudo usermod -a -G docker ec2-user && newgrp docker
+```
+- Install AWS CLI (Note: this comes pre-installed on Amazon Linux)
+- Run `aws configure` to add your AWS credentials to the instance (or attach a suitable IAM role to the instance)
+- Git clone this repo to your instance
+- `cd metaflow-trainium/llama2-7b-pretrain-trn/docker`
+- From the `./docker` directory, run the following commands to build the Docker image and push it to your ECR repo 
+```
+export AWS_ACCT=123412341234   # <- replace with your AWS account number
+export REGION=us-west-2        # <- replace with your desired AWS region
+./login_ecr.sh
+docker build . -t ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:latest
+docker push ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:latest 
+```
+- In `config.py`, change the docker image in the `BatchJobConfig` to match your image's location in ECR. Also update the Job Queue to your desired trn1 job queue in AWS Batch.
 
 # Developing
 
