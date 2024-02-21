@@ -83,7 +83,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         queue=environment_config.train_llama2_step.batch_job.job_queue,
         use_tmpfs=True,  # size is 1/2 of `memory` by default.
     )
-    @neuron_monitor(interval=1)
+    # @neuron_monitor(interval=1)  # FIXME: temporarily disabled due to job failures
     @torchrun
     @step
     def train_llama2(self):

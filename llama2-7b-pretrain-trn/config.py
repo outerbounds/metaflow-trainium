@@ -3,6 +3,7 @@ from typing import Dict, Optional
 import tempfile
 import os
 from metaflow import IncludeFile, Parameter, JSONType
+from metaflow.metaflow_config import DATATOOLS_S3ROOT
 
 
 ### DATASET ###
@@ -134,7 +135,8 @@ env_vars_config = {
     "XLA_USE_BF16": "1",
     "TF_NUM_INTEROP_THREADS": "8192",
     "PROCESSES_PER_NODE": "32",
-    "NEURON_CC_FLAGS": "--model-type transformer --distribution-strategy=llm-training --cache_dir=~/neuron_compile_cache/",
+    "NEURON_CC_FLAGS": "--model-type transformer --distribution-strategy=llm-training",
+    "NEURON_COMPILE_CACHE_URL": os.path.join(DATATOOLS_S3ROOT, "neuron_cache"),
     "NEURON_FUSE_SOFTMAX": "1",
     "NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS": "3",  # Controls number of asynchronous execution requests to be supported. Reduces latency.
     "NEURON_RT_NUM_CORES": str(NUM_RT_NEURON_CORES),
