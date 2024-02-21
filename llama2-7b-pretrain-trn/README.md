@@ -1,12 +1,21 @@
 # Environment setup
 
-## 🚧 Deploy Metaflow stack with AWS Batch dependencies
-> Skip to [making a Docker image](#🐳-make-the-docker-image-for-training) if you already completed this section for the all reduce test and want to use the same Batch compute environment via Metaflow.
+## 🚧 Deploy Metaflow stack in AWS
+If you have not previous deployed the Metaflow stack in AWS, please follow these steps to download and deploy the CloudFormation template:
+- Download the template [HERE](https://github.com/outerbounds/metaflow-tools/blob/master/aws/cloudformation/metaflow-cfn-template.yml)
+- Open the AWS console, and search for "CloudFormation"
+- Choose "Create Stack" -> "With new resources (standard)"
+- Under "Prepare template" select "Template is ready"
+- Under "Template source" select "Upload a template file" and then click the "Choose file" button
+- In the file selector, choose the template file you downloaded above, then click "Next"
+- Name your stack under "Stack name"
+- Set "APIBasicAuth" to false
+- Leave all other fields as their default values
+- Click "Next" through the subsequent screens, then "Submit" to begin stack creation
+- When the stack has been deployed, go to the "Outputs" tab. This tab shows the values that you will need when configuring Metaflow on your instance in subsequent steps
 
-You need to install Metaflow with an AWS Batch compute environment that allows [EFA](https://aws.amazon.com/hpc/efa/) network interfaces. 
-On the Neuron device side, Metaflow takes care of this.
-
-> Follow this Terraform template. 
+## Create AWS Batch resources
+TODO
 
 ## Create an ECR repo for your Neuron-enabled Docker image
 Login to the AWS console and create a new ECR repo called `metaflow_trn1` in your desired region.
@@ -33,6 +42,18 @@ docker build . -t ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:late
 docker push ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:latest 
 ```
 - In `config.py`, change the docker image in the `BatchJobConfig` to match your image's location in ECR. Also update the Job Queue to your desired trn1 job queue in AWS Batch.
+
+## Install and configure Metaflow
+- First create a new virtual environment and install Metaflow & related packages:
+```
+python3 -m venv metaflow_venv
+. ./metaflow_venv/bin/activate
+pip3 install -U pip
+pip3 install -r omegaconf
+pip3 install git+https://github.com/outerbounds/metaflow-torchrun.git@dff2b73c0251919f84c2ebb0ece6475b8d9bd0a9 
+```
+- Next, run `metaflow configure aws`. When prompted, enter the appropriate values from the Metaflow CloudFormation stack's Outputs tab.
+**Note:** please skip the optional `METAFLOW_SERVICE_INTERNAL_URL` value, as it will cause issues if your Metaflow resources and Batch resources use different VPCs.
 
 # Developing
 
