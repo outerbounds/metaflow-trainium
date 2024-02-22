@@ -285,6 +285,8 @@ Resources:
             Tags:
               - Key: from-lt
                 Value: Trn1-EFA-Batch
+              - Key: Name
+                Value: batch-trn1-32xl-worker
         UserData:
           Fn::Base64: !Sub |
             "MIME-Version: 1.0
@@ -333,7 +335,7 @@ Resources:
     Properties:
       Type: Managed
       ServiceRole: !Ref BatchServiceRole
-      ComputeEnvironmentName: !Sub ${AWS::StackName}-Trn1ComputeEnv
+      ComputeEnvironmentName: !Sub ${AWS::StackName}-trn1_compute_env
       ComputeResources:
         Type: EC2
         InstanceTypes:
@@ -356,7 +358,7 @@ Resources:
           Order: 1
       Priority: 1
       State: "ENABLED"
-      JobQueueName: !Sub ${AWS::StackName}-Trn1_Batch_Job_Queue
+      JobQueueName: !Sub ${AWS::StackName}-trn1_batch_job_queue
     DependsOn: BatchComputeEnv
 
 Outputs:
