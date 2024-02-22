@@ -283,8 +283,6 @@ Resources:
         TagSpecifications:
           - ResourceType: instance
             Tags:
-              - Key: from-lt
-                Value: Trn1-EFA-Batch
               - Key: Name
                 Value: batch-trn1-32xl-worker
         UserData:
