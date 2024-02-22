@@ -207,6 +207,12 @@ Resources:
     Properties:
       Strategy: cluster
 
+  PlacementGroupTrn1n:
+    Type: AWS::EC2::PlacementGroup
+    Properties:
+      Strategy: cluster
+
+  # Launch template for trn1.32xl instances with 8 EFA devices
   Trn1LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -312,6 +318,168 @@ Resources:
 
             --==MYBOUNDARY==--"
 
+  # Launch template for trn1n.32xl instances with 16 EFA devices
+  Trn1nLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Name: !Ref NodeInstanceProfile
+        InstanceType: trn1n.32xlarge
+        ImageId: !Ref NodeImageIdSSMParam
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              Encrypted: false
+              VolumeSize: 512
+              VolumeType: gp3
+        NetworkInterfaces:
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 0
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 0
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 1
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 2
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 2
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 3
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 3
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 4
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 5
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 6
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 7
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 8
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 9
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 10
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 11
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 12
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 13
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 14
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 15
+            SubnetId: !Ref PrivateSubnet1
+        Placement:
+          GroupName: !Ref PlacementGroupTrn1n
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: batch-trn1n-32xl-worker
+        UserData:
+          Fn::Base64: !Sub |
+            "MIME-Version: 1.0
+            Content-Type: multipart/mixed; boundary="==MYBOUNDARY=="
+
+            --==MYBOUNDARY==
+            Content-Type: text/cloud-boothook; charset="us-ascii"
+
+            #!/bin/bash
+            cloud-init-per once yum_wget yum install -y wget
+            cloud-init-per once wget_efa wget -q --timeout=20 https://s3-us-west-2.amazonaws.com/aws-efa-installer/aws-efa-installer-latest.tar.gz -O /tmp/aws-efa-installer-latest.tar.gz
+            cloud-init-per once tar_efa tar -xf /tmp/aws-efa-installer-latest.tar.gz -C /tmp
+            pushd /tmp/aws-efa-installer
+            cloud-init-per once install_efa ./efa_installer.sh -y
+            pop /tmp/aws-efa-installer
+
+            cloud-init-per once efa_info /opt/amazon/efa/bin/fi_info -p efa
+
+            cloud-init-per once neuron_driver1 echo -e "[neuron]\nname=Neuron YUM Repository\nbaseurl=https://yum.repos.neuron.amazonaws.com\nenabled=1\nmetadata_expire=0" | tee /etc/yum.repos.d/neuron.repo > /dev/null
+            cloud-init-per once neuron_driver2 rpm --import https://yum.repos.neuron.amazonaws.com/GPG-PUB-KEY-AMAZON-AWS-NEURON.PUB
+            cloud-init-per once neuron_driver3 yum update -y
+            cloud-init-per once neuron_driver4 yum install kernel-devel kernel-headers -y
+            cloud-init-per once neuron_driver5 yum erase aws-neuronx-dkms -y
+            cloud-init-per once neuron_driver6 yum install aws-neuronx-dkms-2.* -y
+
+            --==MYBOUNDARY==--"
+
   BatchServiceRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -328,12 +496,12 @@ Resources:
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole'
 
-  BatchComputeEnv:
+  Trn1BatchComputeEnv:
     Type: "AWS::Batch::ComputeEnvironment"
     Properties:
       Type: Managed
       ServiceRole: !Ref BatchServiceRole
-      ComputeEnvironmentName: !Sub ${AWS::StackName}-trn1_compute_env
+      ComputeEnvironmentName: !Sub ${AWS::StackName}-trn1_32xl_compute_env
       ComputeResources:
         Type: EC2
         InstanceTypes:
@@ -352,14 +520,48 @@ Resources:
     Type: "AWS::Batch::JobQueue"
     Properties:
       ComputeEnvironmentOrder:
-        - ComputeEnvironment: !Ref BatchComputeEnv
+        - ComputeEnvironment: !Ref Trn1BatchComputeEnv
           Order: 1
       Priority: 1
       State: "ENABLED"
-      JobQueueName: !Sub ${AWS::StackName}-trn1_batch_job_queue
-    DependsOn: BatchComputeEnv
+      JobQueueName: !Sub ${AWS::StackName}-trn1_32xl_batch_job_queue
+    DependsOn: Trn1BatchComputeEnv
+
+  Trn1nBatchComputeEnv:
+    Type: "AWS::Batch::ComputeEnvironment"
+    Properties:
+      Type: Managed
+      ServiceRole: !Ref BatchServiceRole
+      ComputeEnvironmentName: !Sub ${AWS::StackName}-trn1n_32xl_compute_env
+      ComputeResources:
+        Type: EC2
+        InstanceTypes:
+          - trn1n.32xlarge
+        Subnets:
+          - !Ref PrivateSubnet1
+        MaxvCpus: 512
+        MinvCpus: 0
+        DesiredvCpus: 0
+        LaunchTemplate:
+          LaunchTemplateId: !Ref Trn1nLaunchTemplate
+        InstanceRole: !Ref NodeInstanceProfile
+      State: ENABLED
+
+  Trn1nBatchJobQueue:
+    Type: "AWS::Batch::JobQueue"
+    Properties:
+      ComputeEnvironmentOrder:
+        - ComputeEnvironment: !Ref Trn1nBatchComputeEnv
+          Order: 1
+      Priority: 1
+      State: "ENABLED"
+      JobQueueName: !Sub ${AWS::StackName}-trn1n_32xl_batch_job_queue
+    DependsOn: Trn1nBatchComputeEnv
 
 Outputs:
   Trn1JobQueue:
-    Description: AWS Batch job queue for running trn1 jobs
+    Description: AWS Batch job queue for running jobs on trn1.32xlarge instances
     Value: !Select [1, !Split ["/", !Ref Trn1BatchJobQueue]]
+  Trn1nJobQueue:
+    Description: AWS Batch job queue for running jobs on trn1n.32xlarge instances
+    Value: !Select [1, !Split ["/", !Ref Trn1nBatchJobQueue]]
