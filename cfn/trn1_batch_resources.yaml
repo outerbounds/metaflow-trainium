@@ -558,6 +558,11 @@ Resources:
       JobQueueName: !Sub ${AWS::StackName}-trn1n_32xl_batch_job_queue
     DependsOn: Trn1nBatchComputeEnv
 
+  TrnRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${AWS::StackName}-metaflow_trn1
+
 Outputs:
   Trn1JobQueue:
     Description: AWS Batch job queue for running jobs on trn1.32xlarge instances
@@ -565,3 +570,6 @@ Outputs:
   Trn1nJobQueue:
     Description: AWS Batch job queue for running jobs on trn1n.32xlarge instances
     Value: !Select [1, !Split ["/", !Ref Trn1nBatchJobQueue]]
+  RepoUri:
+    Description: Uri for the ECR repo that will store your Trainium Docker images
+    Value: !GetAtt TrnRepo.RepositoryUri

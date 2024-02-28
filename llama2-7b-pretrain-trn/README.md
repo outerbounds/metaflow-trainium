@@ -1,83 +1,12 @@
-# Environment setup
+# Llama2-7B pretraining
 
-AWS Trainium is currently supported in us-east-1, us-east-2, and us-west-2. In the following steps, please make sure that you are working in one of these supported regions.
+This flow will run a multi-node Llama2-7B pretraining job in AWS Batch using AWS EC2 trn1 instances with AWS Trainium ML chips.
 
-## 🚧 Deploy Metaflow stack in AWS
-If you have not previously deployed the Metaflow stack in AWS, please follow these steps to download and deploy the CloudFormation template:
-- Download the template [HERE](https://github.com/outerbounds/metaflow-tools/blob/master/aws/cloudformation/metaflow-cfn-template.yml)
-- Open the AWS console, and search for "CloudFormation"
-- Choose "Create Stack" -> "With new resources (standard)"
-- Under "Prepare template" select "Template is ready"
-- Under "Template source" select "Upload a template file" and then click the "Choose file" button
-- In the file selector, choose the template file you downloaded above, then click "Next"
-- Name your stack under "Stack name"
-- Set "APIBasicAuth" to false
-- Leave all other fields as their default values
-- Click "Next" through the subsequent screens, then "Submit" to begin stack creation
-- When the stack has been deployed, go to the "Outputs" tab. This tab shows the values that you will need when configuring Metaflow on your instance in subsequent steps
-
-## Create an ECR repo for your Neuron-enabled Docker image
-- Open the AWS console, search for "Elastic Container Registry", and create a new ECR repo called `metaflow_trn1` in your desired region.
-
-## 🐳 Make the Docker image for training
-The Docker image should be built using an x86_64-based Linux EC2 instance (ex: a c5.xlarge running Amazon Linux)
-- Launch and login to your EC2 instance
-- Install and start Docker
-```
-sudo yum install docker -y
-sudo service docker start
-sudo usermod -a -G docker ec2-user && newgrp docker
-```
-- Install AWS CLI (Note: this comes pre-installed on Amazon Linux)
-- Run `aws configure` to add your AWS credentials to the instance (or attach a suitable IAM role to the instance)
-- Git clone this repo to your instance
-```
-git clone https://github.com/5cp/metaflow-trainium.git -b aws_testing
-cd metaflow-trainium/llama2-7b-pretrain-trn/docker
-```
-- From the `./docker` directory, run the following commands to build the Docker image and push it to your ECR repo 
-```
-export AWS_ACCT=123412341234   # <- replace with your AWS account number
-export REGION=us-west-2        # <- replace with your desired AWS region
-
-./login_ecr.sh
-docker build . -t ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:latest
-docker push ${AWS_ACCT}.dkr.ecr.${REGION}.amazonaws.com/metaflow_trn1:latest 
-```
-
-## Install and configure Metaflow
-- First create a new virtual environment and install Metaflow & related packages:
-```
-python3 -m venv metaflow_venv
-. ./metaflow_venv/bin/activate
-pip3 install -U pip
-pip3 install metaflow omegaconf
-pip3 install git+https://github.com/outerbounds/metaflow-torchrun.git@dff2b73c0251919f84c2ebb0ece6475b8d9bd0a9 
-```
-- Next, run `metaflow configure aws`. When prompted, enter the appropriate values from the Metaflow CloudFormation stack's Outputs tab.
-**Note:** please skip the optional `METAFLOW_SERVICE_INTERNAL_URL` value, as it will cause issues if your Metaflow resources and Batch resources use different VPCs.
-
-## Create AWS Batch resources
-Before you can run AWS Trainium jobs in AWS Batch, you first need to create a VPC with Trainium-supported subnets, EC2 launch template, AWS Batch compute environment, and AWS Batch job queue. If you have not yet created these resources, you can use the provided Cloudformation template to quickly deploy a basic setup to get you started.
-
-You can either download the [Cloudformation template](./aws_batch_setup/trn1_batch_resources.yaml) and deploy the stack in the AWS console, or deploy the stack from the command-line as follows:
-```
-export REGION=us-west-2       # replace with your desired region
-export STACKNAME=trn1-batch   # replace with your desired stack name
-
-aws cloudformation --region $REGION create-stack \
---stack-name $STACKNAME \
---template-body file://aws_batch_setup/trn1_batch_resources.yaml \
---capabilities CAPABILITY_IAM
-```
-
-You can monitor the stack deployment process in the AWS CloudFormation console. Once the stack has deployed, look at the `Outputs` tab to determine the name of your AWS Batch job queue. You will need this value in the subsequent step.
-
-# Developing
-
+Note: this example uses the Meta Llama2 model which is bound by [Meta's Llama license](https://llama.meta.com/llama-downloads/). Please ensure that you have agreed to the license terms and requested access to the Llama model files, then copy the `config.json` and `tokenizer.model` files from the [Hugging Face Llama repo](https://huggingface.co/meta-llama/Llama-2-7b-hf/tree/main) to the `lama2-7b-pretrain-trn` example directory before proceeding.
+`
 ## ⚙️ Configure the run
 Look at the options in `config.py` to familiarize yourself with the project.
-In `config.py`, change the docker image in the `BatchJobConfig` to match your image's location in ECR. Also update the Job Queue to your desired trn1 job queue in AWS Batch.
+In `config.py`, change the Docker image in the `BatchJobConfig` to match your image's location in ECR. Also update the Job Queue to your desired trn1 job queue in AWS Batch.
 When satisfied, run `python config.py` and it will generate a `.yaml` file called `config.yaml`.
 
 ## ▶️ Run the flow
@@ -90,6 +19,3 @@ python flow.py run --config-file config.yaml
 At the end of each run, the workflow in `flow.py` writes the latest checkpoint to the `model_store` contained in S3. 
 You can change how these results are indexed by reading the `flow.py` code if you wish. 
 By default, the checkpoints are indexed in S3 by the workflow `run_id` property. 
-
-# Limitations & workarounds
-[AWS Batch Multinode](https://docs.aws.amazon.com/batch/latest/userguide/multi-node-parallel-jobs.html) jobs are not supported on step functions.
