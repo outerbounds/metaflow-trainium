@@ -1,0 +1,575 @@
+Parameters:
+  NodeImageIdSSMParam:
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+    Description: AWS Systems Manager Parameter Store parameter of the AMI ID for the worker node instances.
+
+Mappings:
+  PartitionMap:
+    aws:
+      EC2ServicePrincipal: "ec2.amazonaws.com"
+    aws-us-gov:
+      EC2ServicePrincipal: "ec2.amazonaws.com"
+    aws-cn:
+      EC2ServicePrincipal: "ec2.amazonaws.com.cn"
+    aws-iso:
+      EC2ServicePrincipal: "ec2.c2s.ic.gov"
+    aws-iso-b:
+      EC2ServicePrincipal: "ec2.sc2s.sgov.gov"
+
+  Trn1AzMap:
+    us-east-1:
+      AZID: use1-az6
+    us-east-2:
+      AZID: use2-az3
+    us-west-2:
+      AZID: usw2-az4
+
+Resources:
+  TrainiumVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TrainiumVPC
+      AvailabilityZoneId: !FindInMap [Trn1AzMap, !Ref "AWS::Region", AZID]
+      CidrBlock: 10.0.0.0/18
+      MapPublicIpOnLaunch: true
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TrainiumVPC
+      AvailabilityZoneId: !FindInMap [Trn1AzMap, !Ref "AWS::Region", AZID]
+      CidrBlock: 10.0.64.0/18
+      MapPublicIpOnLaunch: false
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref TrainiumVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref TrainiumVPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: NatPublicIP
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      AllocationId: !GetAtt NatPublicIP.AllocationId
+
+  NatPublicIP:
+    Type: AWS::EC2::EIP
+    DependsOn: TrainiumVPC
+    Properties:
+      Domain: vpc
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref TrainiumVPC
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      NatGatewayId: !Ref NatGateway
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  EFASecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Security group for all nodes in the cluster
+      VpcId: !Ref TrainiumVPC
+
+  EFASecurityGroupIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: EFASecurityGroup
+    Properties:
+      Description: Allow node to communicate with each other
+      FromPort: 0
+      GroupId: !Ref EFASecurityGroup
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !Ref EFASecurityGroup
+      ToPort: 65535
+
+  EFASecurityGroupEgress:
+    Type: "AWS::EC2::SecurityGroupEgress"
+    DependsOn: EFASecurityGroup
+    Properties:
+      Description: Allow the efa worker nodes outbound communication
+      DestinationSecurityGroupId: !Ref EFASecurityGroup
+      FromPort: 0
+      GroupId: !Ref EFASecurityGroup
+      IpProtocol: "-1"
+      ToPort: 65536
+
+  EFASecurityGroupEgressAllIpv4:
+    Type: "AWS::EC2::SecurityGroupEgress"
+    DependsOn: EFASecurityGroup
+    Properties:
+      Description: Allow the efa worker nodes outbound communication
+      FromPort: 0
+      CidrIp: "0.0.0.0/0"
+      GroupId: !Ref EFASecurityGroup
+      IpProtocol: "-1"
+      ToPort: 65536
+
+  EFASecurityGroupEgressAllIpv6:
+    Type: "AWS::EC2::SecurityGroupEgress"
+    DependsOn: EFASecurityGroup
+    Properties:
+      Description: Allow the efa worker nodes outbound communication
+      FromPort: 0
+      CidrIpv6: "::/0"
+      GroupId: !Ref EFASecurityGroup
+      IpProtocol: "-1"
+      ToPort: 65536
+
+  EFASecurityGroupIngressSSHIpv4:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: EFASecurityGroup
+    Properties:
+      Description: Allow SSH
+      FromPort: 22
+      CidrIp: "0.0.0.0/0"
+      GroupId: !Ref EFASecurityGroup
+      IpProtocol: "tcp"
+      ToPort: 22
+
+  EFASecurityGroupIngressSSHIpv6:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: EFASecurityGroup
+    Properties:
+      Description: Allow SSH
+      FromPort: 22
+      CidrIpv6: "::/0"
+      GroupId: !Ref EFASecurityGroup
+      IpProtocol: "tcp"
+      ToPort: 22
+
+  NodeInstanceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - !FindInMap [PartitionMap, !Ref "AWS::Partition", EC2ServicePrincipal]
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+      Path: /
+
+  NodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+        - Ref: NodeInstanceRole
+
+  PlacementGroupTrn1:
+    Type: AWS::EC2::PlacementGroup
+    Properties:
+      Strategy: cluster
+
+  PlacementGroupTrn1n:
+    Type: AWS::EC2::PlacementGroup
+    Properties:
+      Strategy: cluster
+
+  # Launch template for trn1.32xl instances with 8 EFA devices
+  Trn1LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Name: !Ref NodeInstanceProfile
+        InstanceType: trn1.32xlarge
+        ImageId: !Ref NodeImageIdSSMParam
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              Encrypted: false
+              VolumeSize: 512
+              VolumeType: gp3
+        NetworkInterfaces:
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 0
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 0
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 1
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 2
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 3
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 4
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 5
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 6
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 7
+            SubnetId: !Ref PrivateSubnet1
+        Placement:
+          GroupName: !Ref PlacementGroupTrn1
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: batch-trn1-32xl-worker
+        UserData:
+          Fn::Base64: !Sub |
+            "MIME-Version: 1.0
+            Content-Type: multipart/mixed; boundary="==MYBOUNDARY=="
+
+            --==MYBOUNDARY==
+            Content-Type: text/cloud-boothook; charset="us-ascii"
+
+            #!/bin/bash
+            cloud-init-per once yum_wget yum install -y wget
+            cloud-init-per once wget_efa wget -q --timeout=20 https://s3-us-west-2.amazonaws.com/aws-efa-installer/aws-efa-installer-latest.tar.gz -O /tmp/aws-efa-installer-latest.tar.gz
+            cloud-init-per once tar_efa tar -xf /tmp/aws-efa-installer-latest.tar.gz -C /tmp
+            pushd /tmp/aws-efa-installer
+            cloud-init-per once install_efa ./efa_installer.sh -y
+            pop /tmp/aws-efa-installer
+
+            cloud-init-per once efa_info /opt/amazon/efa/bin/fi_info -p efa
+
+            cloud-init-per once neuron_driver1 echo -e "[neuron]\nname=Neuron YUM Repository\nbaseurl=https://yum.repos.neuron.amazonaws.com\nenabled=1\nmetadata_expire=0" | tee /etc/yum.repos.d/neuron.repo > /dev/null
+            cloud-init-per once neuron_driver2 rpm --import https://yum.repos.neuron.amazonaws.com/GPG-PUB-KEY-AMAZON-AWS-NEURON.PUB
+            cloud-init-per once neuron_driver3 yum update -y
+            cloud-init-per once neuron_driver4 yum install kernel-devel kernel-headers -y
+            cloud-init-per once neuron_driver5 yum erase aws-neuronx-dkms -y
+            cloud-init-per once neuron_driver6 yum install aws-neuronx-dkms-2.* -y
+
+            --==MYBOUNDARY==--"
+
+  # Launch template for trn1n.32xl instances with 16 EFA devices
+  Trn1nLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Name: !Ref NodeInstanceProfile
+        InstanceType: trn1n.32xlarge
+        ImageId: !Ref NodeImageIdSSMParam
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              Encrypted: false
+              VolumeSize: 512
+              VolumeType: gp3
+        NetworkInterfaces:
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 0
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 0
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 1
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 2
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 2
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 3
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 3
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 4
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 5
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 6
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 7
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 8
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 9
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 10
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 11
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 12
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 13
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 14
+            SubnetId: !Ref PrivateSubnet1
+          - Description: NetworkInterfaces Configuration For EFA and Batch
+            DeviceIndex: 1
+            Groups:
+              - !Ref EFASecurityGroup
+            InterfaceType: efa
+            NetworkCardIndex: 15
+            SubnetId: !Ref PrivateSubnet1
+        Placement:
+          GroupName: !Ref PlacementGroupTrn1n
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: batch-trn1n-32xl-worker
+        UserData:
+          Fn::Base64: !Sub |
+            "MIME-Version: 1.0
+            Content-Type: multipart/mixed; boundary="==MYBOUNDARY=="
+
+            --==MYBOUNDARY==
+            Content-Type: text/cloud-boothook; charset="us-ascii"
+
+            #!/bin/bash
+            cloud-init-per once yum_wget yum install -y wget
+            cloud-init-per once wget_efa wget -q --timeout=20 https://s3-us-west-2.amazonaws.com/aws-efa-installer/aws-efa-installer-latest.tar.gz -O /tmp/aws-efa-installer-latest.tar.gz
+            cloud-init-per once tar_efa tar -xf /tmp/aws-efa-installer-latest.tar.gz -C /tmp
+            pushd /tmp/aws-efa-installer
+            cloud-init-per once install_efa ./efa_installer.sh -y
+            pop /tmp/aws-efa-installer
+
+            cloud-init-per once efa_info /opt/amazon/efa/bin/fi_info -p efa
+
+            cloud-init-per once neuron_driver1 echo -e "[neuron]\nname=Neuron YUM Repository\nbaseurl=https://yum.repos.neuron.amazonaws.com\nenabled=1\nmetadata_expire=0" | tee /etc/yum.repos.d/neuron.repo > /dev/null
+            cloud-init-per once neuron_driver2 rpm --import https://yum.repos.neuron.amazonaws.com/GPG-PUB-KEY-AMAZON-AWS-NEURON.PUB
+            cloud-init-per once neuron_driver3 yum update -y
+            cloud-init-per once neuron_driver4 yum install kernel-devel kernel-headers -y
+            cloud-init-per once neuron_driver5 yum erase aws-neuronx-dkms -y
+            cloud-init-per once neuron_driver6 yum install aws-neuronx-dkms-2.* -y
+
+            --==MYBOUNDARY==--"
+
+  BatchServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: 'Allow'
+            Principal:
+              Service:
+                - 'batch.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole'
+
+  Trn1BatchComputeEnv:
+    Type: "AWS::Batch::ComputeEnvironment"
+    Properties:
+      Type: Managed
+      ServiceRole: !Ref BatchServiceRole
+      ComputeEnvironmentName: !Sub ${AWS::StackName}-trn1_32xl_compute_env
+      ComputeResources:
+        Type: EC2
+        InstanceTypes:
+          - trn1.32xlarge
+        Subnets:
+          - !Ref PrivateSubnet1
+        MaxvCpus: 512
+        MinvCpus: 0
+        DesiredvCpus: 0
+        LaunchTemplate:
+          LaunchTemplateId: !Ref Trn1LaunchTemplate
+        InstanceRole: !Ref NodeInstanceProfile
+      State: ENABLED
+
+  Trn1BatchJobQueue:
+    Type: "AWS::Batch::JobQueue"
+    Properties:
+      ComputeEnvironmentOrder:
+        - ComputeEnvironment: !Ref Trn1BatchComputeEnv
+          Order: 1
+      Priority: 1
+      State: "ENABLED"
+      JobQueueName: !Sub ${AWS::StackName}-trn1_32xl_batch_job_queue
+    DependsOn: Trn1BatchComputeEnv
+
+  Trn1nBatchComputeEnv:
+    Type: "AWS::Batch::ComputeEnvironment"
+    Properties:
+      Type: Managed
+      ServiceRole: !Ref BatchServiceRole
+      ComputeEnvironmentName: !Sub ${AWS::StackName}-trn1n_32xl_compute_env
+      ComputeResources:
+        Type: EC2
+        InstanceTypes:
+          - trn1n.32xlarge
+        Subnets:
+          - !Ref PrivateSubnet1
+        MaxvCpus: 512
+        MinvCpus: 0
+        DesiredvCpus: 0
+        LaunchTemplate:
+          LaunchTemplateId: !Ref Trn1nLaunchTemplate
+        InstanceRole: !Ref NodeInstanceProfile
+      State: ENABLED
+
+  Trn1nBatchJobQueue:
+    Type: "AWS::Batch::JobQueue"
+    Properties:
+      ComputeEnvironmentOrder:
+        - ComputeEnvironment: !Ref Trn1nBatchComputeEnv
+          Order: 1
+      Priority: 1
+      State: "ENABLED"
+      JobQueueName: !Sub ${AWS::StackName}-trn1n_32xl_batch_job_queue
+    DependsOn: Trn1nBatchComputeEnv
+
+  TrnRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${AWS::StackName}-metaflow_trn1
+
+Outputs:
+  Trn1JobQueue:
+    Description: AWS Batch job queue for running jobs on trn1.32xlarge instances
+    Value: !Select [1, !Split ["/", !Ref Trn1BatchJobQueue]]
+  Trn1nJobQueue:
+    Description: AWS Batch job queue for running jobs on trn1n.32xlarge instances
+    Value: !Select [1, !Split ["/", !Ref Trn1nBatchJobQueue]]
+  RepoUri:
+    Description: Uri for the ECR repo that will store your Trainium Docker images
+    Value: !GetAtt TrnRepo.RepositoryUri
