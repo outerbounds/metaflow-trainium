@@ -15,11 +15,20 @@ from optimum.neuron.distributed import lazy_load_for_parallelism
 
 
 def training_function(script_args, training_args):
+
+    # import os
+    # print('What is in the dataset path?')
+    # os.listdir(script_args.dataset_path)
+
     # load dataset
     dataset = load_from_disk(script_args.dataset_path)
 
+    print("Dataset loaded from disk", dataset.shape)
+
     # load model from the hub with a bnb config
     tokenizer = AutoTokenizer.from_pretrained(script_args.model_id)
+    print("Tokenizer loaded from pretrained")
+
     with lazy_load_for_parallelism(
         tensor_parallel_size=training_args.tensor_parallel_size
     ):
@@ -29,6 +38,8 @@ def training_function(script_args, training_args):
             low_cpu_mem_usage=True,
             use_cache=False if training_args.gradient_checkpointing else True,
         )
+
+    print("Model loaded from pretrained")
 
     # Create Trainer instance
     trainer = Trainer(
@@ -73,6 +84,7 @@ class ScriptArguments:
 
 
 def main():
+
     parser = HfArgumentParser([ScriptArguments, TrainingArguments])
     script_args, training_args = parser.parse_args_into_dataclasses()
 

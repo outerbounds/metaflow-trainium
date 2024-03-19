@@ -115,7 +115,7 @@ def training_function(args):
         logging_steps=10,
         # evaluation_strategy="epoch",
         # save_strategy="epoch", 
-        # save_total_limit=2,
+        save_total_limit=2,
         # push to hub parameters
         # report_to="tensorboard"
     )

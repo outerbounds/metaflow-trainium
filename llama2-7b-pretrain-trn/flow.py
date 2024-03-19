@@ -75,7 +75,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
 
     @environment(vars=environment_config.train_llama2_step.env_vars)
     @batch(
-        inferentia=environment_config.train_llama2_step.batch_job.n_trainium_devices,
+        trainium=environment_config.train_llama2_step.batch_job.n_trainium_devices,
         efa=environment_config.train_llama2_step.batch_job.n_efa_interfaces,
         cpu=environment_config.train_llama2_step.batch_job.n_cpu,
         memory=environment_config.train_llama2_step.batch_job.memory,
@@ -83,7 +83,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         queue=environment_config.train_llama2_step.batch_job.job_queue,
         use_tmpfs=True,  # size is 1/2 of `memory` by default.
     )
-    # @neuron_monitor(interval=1)  # FIXME: temporarily disabled due to job failures
+    @neuron_monitor(interval=1)  # FIXME: temporarily disabled due to job failures
     @torchrun
     @step
     def train_llama2(self):
@@ -174,9 +174,12 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
 
         # Run llama2 pretraining. @torchrun exposes the current.torch.run action, which constructs the distributed training pieces of the command.
         current.torch.run(
+            torchrun_args={
+                'master_port': "41000",  # NOTE: 41000 is hardcoded in reserved ports in the Dockerfile.
+            },
             entrypoint="tp_zero1_llama2_7b_hf_pretrain.py",
             entrypoint_args=entrypoint_args,
-            master_port="41000",  # NOTE: 41000 is hardcoded in reserved ports in the Dockerfile.
+            # master_port="41000",  # NOTE: 41000 is hardcoded in reserved ports in the Dockerfile.
         )
 
         # Push checkpoints for use in continued pre-training or next stage (e.g., instruction tuning).

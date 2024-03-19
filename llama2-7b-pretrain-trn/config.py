@@ -3,7 +3,6 @@ from typing import Dict, Optional
 import tempfile
 import os
 from metaflow import IncludeFile, Parameter, JSONType
-from metaflow.metaflow_config import DATATOOLS_S3ROOT
 
 
 ### DATASET ###
@@ -75,8 +74,8 @@ class TrainingConfig:
     do_pre_compilation: bool = True
     pre_compilation_steps: int = 1
     warmup_steps: int = 3
-    steps_this_run: int = 100
-    total_steps: int = 100
+    steps_this_run: int = 5
+    total_steps: int = 5
     logging_interval: int = 1  # affects TensorBoard & CLI
     checkpoint_frequency: int = 50
     metrics_file: str = "metrics.json"
@@ -135,8 +134,7 @@ env_vars_config = {
     "XLA_USE_BF16": "1",
     "TF_NUM_INTEROP_THREADS": "8192",
     "PROCESSES_PER_NODE": "32",
-    "NEURON_CC_FLAGS": "--model-type transformer --distribution-strategy=llm-training",
-    "NEURON_COMPILE_CACHE_URL": os.path.join(DATATOOLS_S3ROOT, "neuron_cache"),
+    "NEURON_CC_FLAGS": "--model-type transformer --distribution-strategy=llm-training --cache_dir=~/neuron_compile_cache/",
     "NEURON_FUSE_SOFTMAX": "1",
     "NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS": "3",  # Controls number of asynchronous execution requests to be supported. Reduces latency.
     "NEURON_RT_NUM_CORES": str(NUM_RT_NEURON_CORES),
@@ -149,7 +147,7 @@ env_vars_config = {
 
 @dataclass
 class BatchJobConfig:
-    n_nodes: int = 2
+    n_nodes: int = 4
     n_trainium_devices: int = 16
     n_cpu: int = 96
     memory: int = 500000

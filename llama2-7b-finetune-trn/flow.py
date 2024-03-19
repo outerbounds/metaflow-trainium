@@ -62,7 +62,7 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
     @environment(vars=environment_config.tune_llama2_step.env_vars)
     @neuron_monitor(interval=1)
     @batch(
-        inferentia=environment_config.tune_llama2_step.batch_job.n_trainium_devices,
+        trainium=environment_config.tune_llama2_step.batch_job.n_trainium_devices,
         efa=environment_config.tune_llama2_step.batch_job.n_efa_interfaces,
         cpu=environment_config.tune_llama2_step.batch_job.n_cpu,
         memory=environment_config.tune_llama2_step.batch_job.memory,
@@ -121,9 +121,9 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
 
         # Train the model.
         current.torch.run(
+            torchrun_args={'master_port': '41000'},
             entrypoint="run_clm.py",
-            entrypoint_args=entrypoint_args,
-            master_port="41000",
+            entrypoint_args=entrypoint_args
         )
 
         # Upload tensor parallel shards.

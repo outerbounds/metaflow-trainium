@@ -1,4 +1,4 @@
-from metaflow import FlowSpec, step, batch, torchrun, environment, current
+from metaflow import FlowSpec, step, batch, torchrun, environment, current, Parameter
 import os
 import sys
 
@@ -13,6 +13,13 @@ environment_config = EnvironmentConfig()
 class TrainiumBERTFinetune(FlowSpec, ConfigBase):
 
     _CORE_CONFIG_CLASS = TrainiumBERTFinetuneConfig
+
+    download_precompiled_model = Parameter(
+        "download-precompiled",
+        default=True,
+        type=bool,
+        help="download precompiled model from the model store",
+    )
 
     def _get_data_store(self):
         return DataStore.from_config(self.config.data_store)
@@ -55,7 +62,7 @@ class TrainiumBERTFinetune(FlowSpec, ConfigBase):
     @environment(vars=environment_config.tune_bert_step.env_vars)
     @batch(
         cpu=environment_config.tune_bert_step.batch_job.n_cpu,
-        inferentia=environment_config.tune_bert_step.batch_job.n_trainium,
+        trainium=environment_config.tune_bert_step.batch_job.n_trainium,
         memory=environment_config.tune_bert_step.batch_job.memory,
         image=environment_config.tune_bert_step.batch_job.image,
         queue=environment_config.tune_bert_step.batch_job.job_queue,
@@ -85,15 +92,16 @@ class TrainiumBERTFinetune(FlowSpec, ConfigBase):
         data_store.download(download_path=data_dir)
 
         # Download the neuron compiler cache.
-        neuron_compiler_cache_dir = "/var/tmp/neuron-compile-cache"
-        try:
-            model_store = self._get_model_store()
-            model_store.download(
-                download_path=neuron_compiler_cache_dir,
-                store_key=self.config.model_store.s3_neuron_compiler_cache_key
-            )
-        except ValueError as e:
-            print('Compiler cache is empty, optimum trainer will tell neuron-cc to compile the model. It might take a while...')
+        if self.download_precompiled_model:
+            neuron_compiler_cache_dir = "/var/tmp/neuron-compile-cache"
+            try:
+                model_store = self._get_model_store()
+                model_store.download(
+                    download_path=neuron_compiler_cache_dir,
+                    store_key=self.config.model_store.s3_neuron_compiler_cache_key
+                )
+            except ValueError as e:
+                print('Compiler cache is empty, optimum trainer will tell neuron-cc to compile the model. It might take a while...')
 
         entrypoint_args = {
             "model_id": self.config.model_store.hf_model_name,
@@ -105,11 +113,19 @@ class TrainiumBERTFinetune(FlowSpec, ConfigBase):
             "output_dir": checkpoint_dir,
             "per_device_train_batch_size": self.config.training.per_device_train_batch_size,
             "epochs": self.config.training.epochs,
-            "logging_steps": self.config.training.logging_steps, 
+            "logging_steps": self.config.training.logging_steps
         }
+
+        # import time
+        # time.sleep(3600*2)
  
         # Train the model.
-        current.torch.run(entrypoint="train.py", entrypoint_args=entrypoint_args, master_port="41000")
+        current.torch.run(
+            torchrun_args={'master_port': '41000'}, 
+            entrypoint="train.py", 
+            entrypoint_args=entrypoint_args,
+            # master_port = 41000
+        )
 
         # Upload tensor parallel shards.
         model_store = self._get_model_store()

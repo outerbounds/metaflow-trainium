@@ -222,35 +222,36 @@ class NeuronMonitor:
 
         if self._poller.poll(1):
             proc = AsyncProcessManager.get(self._current_process.uuid)[0]
-            line = proc.stdout.readline()
-            jtmp = json.loads(line.decode())
-            time = datetime.now().strftime(TS_FORMAT)
-            vals = {}
-            for rt_data in jtmp["neuron_runtime_data"]:
-                # core utilization
-                d = rt_data["report"]["neuroncore_counters"]["neuroncores_in_use"]
-                for k in d.keys():
-                    vals[k] = vals.get(k, 0) + d[k]["neuroncore_utilization"]
-                    if k not in devdata:
-                        devdata[k] = {
-                            "neuron_utilization": [],
-                            "memory_used": [],
-                            "memory_total": [],
-                            "timestamp": [],
-                        }
-                    devdata[k]["neuron_utilization"].append(vals[k])
-                # memory utilization
-                d = rt_data["report"]["memory_used"]["neuron_runtime_used_bytes"][
-                    "usage_breakdown"
-                ]["neuroncore_memory_usage"]
-                for k in d.keys():
-                    devdata[k]["memory_used"].append(sum(d[k].values()))
-                    devdata[k]["memory_total"].append(
-                        32 / 2 * 1024 * 1024 * 1024
-                    )  # NOTE: assumes 32GB memory per device.
-                # metadata
-                for k in d.keys():
-                    devdata[k]["timestamp"].append(time)
+            if proc.stdout is not None:
+                line = proc.stdout.readline()
+                jtmp = json.loads(line.decode())
+                time = datetime.now().strftime(TS_FORMAT)
+                vals = {}
+                for rt_data in jtmp["neuron_runtime_data"]:
+                    # core utilization
+                    d = rt_data["report"]["neuroncore_counters"]["neuroncores_in_use"]
+                    for k in d.keys():
+                        vals[k] = vals.get(k, 0) + d[k]["neuroncore_utilization"]
+                        if k not in devdata:
+                            devdata[k] = {
+                                "neuron_utilization": [],
+                                "memory_used": [],
+                                "memory_total": [],
+                                "timestamp": [],
+                            }
+                        devdata[k]["neuron_utilization"].append(vals[k])
+                    # memory utilization
+                    d = rt_data["report"]["memory_used"]["neuron_runtime_used_bytes"][
+                        "usage_breakdown"
+                    ]["neuroncore_memory_usage"]
+                    for k in d.keys():
+                        devdata[k]["memory_used"].append(sum(d[k].values()))
+                        devdata[k]["memory_total"].append(
+                            32 / 2 * 1024 * 1024 * 1024
+                        )  # NOTE: assumes 32GB memory per device.
+                    # metadata
+                    for k in d.keys():
+                        devdata[k]["timestamp"].append(time)
 
         return devdata
 
@@ -293,10 +294,10 @@ class NeuronMonitor:
     def read_hardware_info(self):
         """
         Will read the hardware info from the monitor and return it as a dictionary.
-        This will run before meaningful data is available from the monitor readings.
+        It should run before meaningful data is available from the monitor readings.
         """
-        proc = AsyncProcessManager.get(self._current_process.uuid)[0]
         if self._poller.poll(1):
+            proc = AsyncProcessManager.get(self._current_process.uuid)[0]
             line = proc.stdout.readline()
             data = json.loads(line)
             if "neuron_hardware_info" in data:
@@ -336,18 +337,21 @@ def _update_utilization(results, md_dict):
                 file=sys.stderr,
             )
             continue
-        md_dict[device]["neuron"].update(
-            "%2.1f%%" % max(map(float, data["neuron_utilization"]))
-        )
-        md_dict[device]["memory"].update(
-            "%dMB" % max(map(lambda x: float(x) / (1024 * 1024), data["memory_used"]))
-        )
+        if ("neuron_utilization" in data) and ("memory_used" in data):
+            md_dict[device]["neuron"].update(
+                "%2.1f%%" % max(map(float, data["neuron_utilization"]))
+            )
+            md_dict[device]["memory"].update(
+                "%dMB" % max(map(lambda x: float(x) / (1024 * 1024), data["memory_used"]))
+            )
 
 
 def _update_charts(results, md_dict):
     for device, data in results["profile"].items():
         try:
             if device not in md_dict:
+                continue
+            if ("neuron_utilization" not in data) or ("memory_used" not in data):
                 continue
             neuron_plot, mem_plot, ts_range = profile_plots(
                 device,
@@ -423,6 +427,9 @@ class NeuronProfiler:
             readings = self._make_reading()
             if readings is None:
                 print("Neuron monitor readings are none", file=sys.stderr)
+                time.sleep(self._interval)
+                continue
+            if len(readings["profile"]) == 0:
                 time.sleep(self._interval)
                 continue
             _update_utilization(readings, self._card_comps["max_utilization"])

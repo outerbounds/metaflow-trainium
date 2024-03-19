@@ -39,7 +39,7 @@ class TrainingConfig:
     learning_rate: float = 5e-5
     per_device_train_batch_size: int = 2
     # tensor_parallel_size: int = 1
-    epochs: int = 2
+    epochs: int = 1
     logging_steps: int = 10
 
 
@@ -73,6 +73,8 @@ class CachingEnvironmentConfig:
 # for @step tune_bert in flow.py
 training_env_config = {
     "git+https://github.com/huggingface/optimum-neuron.git": "",
+    # d31985678f800cdb9b8a942d3f8a69d7a9e4787c
+
     "evaluate": "0.4.1",
     "regex": "2023.12.25",
     # "tensorboard": "2.15.1",
@@ -86,8 +88,8 @@ training_env_config = {
 env_vars_config = {
     # "FI_EFA_USE_DEVICE_RDMA": "1",
     # "FI_PROVIDER": "efa",
-    # "FI_EFA_FORK_SAFE": "1",
-    # "CCOM_SOCKET_IFNAME": "eth0",
+    "FI_EFA_FORK_SAFE": "1",
+    "CCOM_SOCKET_IFNAME": "eth0",
     # "MALLOC_ARENA_MAX": "64",  # host OOM
 }
 

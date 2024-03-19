@@ -24,8 +24,8 @@ training:
   do_pre_compilation: true
   pre_compilation_steps: 1
   warmup_steps: 3
-  steps_this_run: 100
-  total_steps: 100
+  steps_this_run: 5
+  total_steps: 5
   logging_interval: 1
   checkpoint_frequency: 50
   metrics_file: metrics.json
