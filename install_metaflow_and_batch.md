@@ -5,7 +5,7 @@ This section explains how to deploy the required Metaflow and AWS Batch resource
 AWS Trainium is currently supported in us-east-1, us-east-2, and us-west-2. In the following steps, please make sure that you are working in one of these supported regions.
 
 ## 🛠️ Deploy Metaflow stack in AWS
-If you have not previously deployed the Metaflow stack in AWS, please follow these steps to download and deploy the CloudFormation template:
+If you have not previously deployed the Metaflow stack in AWS, please follow these steps to download and deploy the CloudFormation template from the console:
 - Download the template [HERE](https://github.com/outerbounds/metaflow-tools/blob/master/aws/cloudformation/metaflow-cfn-template.yml)
 - Open the AWS console, and search for "CloudFormation"
 - Choose "Create Stack" -> "With new resources (standard)"
@@ -13,19 +13,19 @@ If you have not previously deployed the Metaflow stack in AWS, please follow the
 - Under "Template source" select "Upload a template file" and then click the "Choose file" button
 - In the file selector, choose the template file you downloaded above, then click "Next"
 - Name your stack under "Stack name"
-- Set "APIBasicAuth" to false
+- Set "APIBasicAuth" to false (unless you know what you are doing, leaving this as true requires extra steps to use Metaflow)
 - Leave all other fields as their default values
 - Click "Next" through the subsequent screens, then "Submit" to begin stack creation
 - When the stack has been deployed, go to the `Outputs` tab. This tab shows the values that you will need when configuring Metaflow on your instance in subsequent steps
 
 Please note that this default Metaflow stack will create a Batch job queue that is not enabled for Trainium / trn1 instances. The Trainium-enabled job queue will created in the next section, and it is the queue that should be specified when launching Trainium-based training jobs. 
 
-## 🛠️ Create AWS Batch resources
+## 🛠️ Create AWS Batch resources for Trainium
 Before you can run AWS Trainium jobs in AWS Batch, you first need to create a VPC with Trainium-supported subnets, EC2 launch template, AWS Batch compute environment, and AWS Batch job queue. If you have not yet created these resources, you can use the provided Cloudformation template to quickly deploy a basic setup to get you started.
 
 You can either download the [Cloudformation template](./cfn/trn1_batch_resources.yaml) and deploy the stack in the AWS console, or deploy the stack from the command-line as follows:
 ```
-REGION=us-west-2       # replace with your desired region
+REGION=us-west-2       # replace with your desired region. NOTE: this should match your Metaflow stack region
 STACKNAME=trn1-batch   # replace with your desired stack name
 
 aws cloudformation --region $REGION create-stack \
