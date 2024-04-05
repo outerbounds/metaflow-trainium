@@ -222,37 +222,39 @@ class NeuronMonitor:
 
         if self._poller.poll(1):
             proc = AsyncProcessManager.get(self._current_process.uuid)[0]
-            if proc.stdout is not None:
-                line = proc.stdout.readline()
-                jtmp = json.loads(line.decode())
-                time = datetime.now().strftime(TS_FORMAT)
-                vals = {}
-                for rt_data in jtmp["neuron_runtime_data"]:
-                    # core utilization
-                    d = rt_data["report"]["neuroncore_counters"]["neuroncores_in_use"]
-                    for k in d.keys():
-                        vals[k] = vals.get(k, 0) + d[k]["neuroncore_utilization"]
-                        if k not in devdata:
-                            devdata[k] = {
-                                "neuron_utilization": [],
-                                "memory_used": [],
-                                "memory_total": [],
-                                "timestamp": [],
-                            }
-                        devdata[k]["neuron_utilization"].append(vals[k])
-                    # memory utilization
-                    d = rt_data["report"]["memory_used"]["neuron_runtime_used_bytes"][
-                        "usage_breakdown"
-                    ]["neuroncore_memory_usage"]
-                    for k in d.keys():
-                        devdata[k]["memory_used"].append(sum(d[k].values()))
-                        devdata[k]["memory_total"].append(
-                            32 / 2 * 1024 * 1024 * 1024
-                        )  # NOTE: assumes 32GB memory per device.
-                    # metadata
-                    for k in d.keys():
-                        devdata[k]["timestamp"].append(time)
-
+            try:
+                if proc.stdout is not None:
+                    line = proc.stdout.readline()
+                    jtmp = json.loads(line.decode())
+                    time = datetime.now().strftime(TS_FORMAT)
+                    vals = {}
+                    for rt_data in jtmp["neuron_runtime_data"]:
+                        # core utilization
+                        d = rt_data["report"]["neuroncore_counters"]["neuroncores_in_use"]
+                        for k in d.keys():
+                            vals[k] = vals.get(k, 0) + d[k]["neuroncore_utilization"]
+                            if k not in devdata:
+                                devdata[k] = {
+                                    "neuron_utilization": [],
+                                    "memory_used": [],
+                                    "memory_total": [],
+                                    "timestamp": [],
+                                }
+                            devdata[k]["neuron_utilization"].append(vals[k])
+                        # memory utilization
+                        d = rt_data["report"]["memory_used"]["neuron_runtime_used_bytes"][
+                            "usage_breakdown"
+                        ]["neuroncore_memory_usage"]
+                        for k in d.keys():
+                            devdata[k]["memory_used"].append(sum(d[k].values()))
+                            devdata[k]["memory_total"].append(
+                                32 / 2 * 1024 * 1024 * 1024
+                            )  # NOTE: assumes 32GB memory per device.
+                        # metadata
+                        for k in d.keys():
+                            devdata[k]["timestamp"].append(time)
+            except AttributeError as e:
+                pass # Ignore the error, it means there is no process running to read from
         return devdata
 
     def _update_readings(self):
@@ -382,14 +384,24 @@ class NeuronProfiler:
         self._interval = interval
 
         time.sleep(1)
-        self.hardware_info_dict = self._monitor.read_hardware_info()
-        self.devices = [
-            str(i)
-            for i in range(
-                int(self.hardware_info_dict["neuron_device_count"])
-                * int(self.hardware_info_dict["neuroncore_per_device_count"])
-            )
-        ]
+        
+        iter = 0
+        while True:
+            self.hardware_info_dict = self._monitor.read_hardware_info()
+            try:
+                self.devices = [
+                    str(i)
+                    for i in range(
+                        int(self.hardware_info_dict["neuron_device_count"])
+                        * int(self.hardware_info_dict["neuroncore_per_device_count"])
+                    )
+                ]
+                break
+            except TypeError as e:
+                time.sleep(3)
+                iter += 1
+                if iter > 5:
+                    raise ValueError("Couldn't read hardware info from the monitor")
 
         self._card_comps = {"max_utilization": {}, "charts": {}, "reading_duration": {}}
         self._card_created = False
