@@ -63,7 +63,7 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
     @neuron_monitor(interval=1)
     @batch(
         trainium=environment_config.tune_llama2_step.batch_job.n_trainium_devices,
-        efa=environment_config.tune_llama2_step.batch_job.n_efa_interfaces,
+        # efa=environment_config.tune_llama2_step.batch_job.n_efa_interfaces,
         cpu=environment_config.tune_llama2_step.batch_job.n_cpu,
         memory=environment_config.tune_llama2_step.batch_job.memory,
         image=environment_config.tune_llama2_step.batch_job.image,

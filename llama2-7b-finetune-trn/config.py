@@ -104,7 +104,7 @@ class BatchJobConfig:
     memory: int = 500000
     n_efa_interfaces: int = 8
     image: str = "public.ecr.aws/outerbounds/trainium:llama2"
-    job_queue: str = "oleg2-mztdpcvj-efa"
+    job_queue: str = "trn1-batch-trn1_32xl_batch_job_queue"
 
 
 @dataclass
