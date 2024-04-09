@@ -60,14 +60,26 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
                 sys.exit(store.download_instructions)
         self.next(self.cache_dataset)
 
+    def _write_config_as_json(self, relpath=''):
+        from omegaconf import OmegaConf
+        import json
+
+        model_arch_config = OmegaConf.to_container(self.config.model_architecture)
+        with open(os.path.join(relpath, "config.json"), "w") as f:
+            json.dump(model_arch_config, f)
+
     @pip(packages={**environment_config.dataset_cache_step.packages})
     @enable_decorator(batch, environment_config.dataset_cache_step.batch_enabled)
     @step
     def cache_dataset(self):
-        store = self._get_data_store()
-        if not store.already_exists():
-            store.download_from_huggingface(self.config.data_store)
-            store.upload(self.config.data_store.local_path)
+        data_store = self._get_data_store()
+        if not data_store.already_exists():
+            self._write_config_as_json()
+            if not os.path.exists(self.config.tokenizer_store.local_path):
+                tokenizer_store = self._get_tokenizer_store()
+                tokenizer_store.download(download_path=self.config.tokenizer_store.local_path)
+            data_store.download_from_huggingface(self.config.data_store)
+            data_store.upload(self.config.data_store.local_path)
         self.next(
             self.train_llama2,
             num_parallel=environment_config.train_llama2_step.batch_job.n_nodes,
@@ -83,12 +95,12 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         queue=environment_config.train_llama2_step.batch_job.job_queue,
         use_tmpfs=True,  # size is 1/2 of `memory` by default.
     )
-    @neuron_monitor(interval=1)  # FIXME: temporarily disabled due to job failures
+    @neuron_monitor(interval=1)
     @torchrun
     @step
     def train_llama2(self):
-        from omegaconf import OmegaConf
-        import json
+        # from omegaconf import OmegaConf
+        # import json
 
         # Create model_store.local_weights_path directory relative to working directory.
         # This is where model weights and config go, NOT the checkpoints.
@@ -130,9 +142,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             )
 
         # Write config.json used by transformers model. If desired, you could alternatively package a hard-coded config.json in the Docker image.
-        model_arch_config = OmegaConf.to_container(self.config.model_architecture)
-        with open(os.path.join(model_path, "config.json"), "w") as f:
-            json.dump(model_arch_config, f)
+        self._write_config_as_json(relpath=model_path)
 
         # Configure entrypoint args.
         world_size = (
@@ -204,6 +214,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             )
 
             # Store metrics file.
+            import json
             self.metrics_json = json.load(open(metrics_file))
 
         self.next(self.join)
