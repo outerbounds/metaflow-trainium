@@ -56,6 +56,7 @@ class TrainiumBERTFinetuneConfig:
 # for @step cache_dataset in flow.py
 caching_env_config = {
     "transformers": "4.31.0",
+    "torch": "2.2.2",
     "regex": "2023.12.25",
     "datasets": "2.16.1",
     "sentencepiece": "0.1.99",
@@ -101,7 +102,7 @@ class BatchJobConfig:
     n_cpu: int = 4
     memory: int = 24000
     image: str = "public.ecr.aws/outerbounds/trainium:llama2"
-    job_queue: str = "small-trainium"
+    job_queue: str = "trn1-batch-trn1_32xl_batch_job_queue"
     use_tmpfs: bool = False
 
 

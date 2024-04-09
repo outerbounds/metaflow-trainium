@@ -18,7 +18,7 @@ class TrainiumAllReduce(FlowSpec):
         cpu=96,
         memory=500000,
         image="public.ecr.aws/outerbounds/trainium:latest",
-        queue="oleg2-mztdpcvj-efa",
+        queue="trn1-batch-trn1_32xl_batch_job_queue",
     )
     @step
     def make_instance(self):
