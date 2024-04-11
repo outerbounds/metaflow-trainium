@@ -189,7 +189,6 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             },
             entrypoint="tp_zero1_llama2_7b_hf_pretrain.py",
             entrypoint_args=entrypoint_args,
-            # master_port="41000",  # NOTE: 41000 is hardcoded in reserved ports in the Dockerfile.
         )
 
         # Push checkpoints for use in continued pre-training or next stage (e.g., instruction tuning).

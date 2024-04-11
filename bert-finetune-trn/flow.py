@@ -127,15 +127,11 @@ class TrainiumBERTFinetune(FlowSpec, ConfigBase):
             "logging_steps": self.config.training.logging_steps,
         }
 
-        # import time
-        # time.sleep(3600*2)
-
         # Train the model.
         current.torch.run(
             torchrun_args={"master_port": "41000"},
             entrypoint="train.py",
-            entrypoint_args=entrypoint_args,
-            # master_port = 41000
+            entrypoint_args=entrypoint_args
         )
 
         # Upload tensor parallel shards.
