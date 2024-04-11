@@ -99,8 +99,6 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
     @torchrun
     @step
     def train_llama2(self):
-        # from omegaconf import OmegaConf
-        # import json
 
         # Create model_store.local_weights_path directory relative to working directory.
         # This is where model weights and config go, NOT the checkpoints.
