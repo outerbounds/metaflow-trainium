@@ -300,6 +300,7 @@ Resources:
             Content-Type: text/cloud-boothook; charset="us-ascii"
 
             #!/bin/bash
+            sudo yum install -y libibverbs-utils rdma-core-devel ibacm infiniband-diags-compat librdmacm-utils
             cloud-init-per once yum_wget yum install -y wget
             cloud-init-per once wget_efa wget -q --timeout=20 https://s3-us-west-2.amazonaws.com/aws-efa-installer/aws-efa-installer-latest.tar.gz -O /tmp/aws-efa-installer-latest.tar.gz
             cloud-init-per once tar_efa tar -xf /tmp/aws-efa-installer-latest.tar.gz -C /tmp
