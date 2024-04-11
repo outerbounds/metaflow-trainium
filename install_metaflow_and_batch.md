@@ -6,7 +6,7 @@ AWS Trainium is currently supported in us-east-1, us-east-2, and us-west-2. In t
 
 ## 🛠️ Deploy Metaflow stack in AWS
 If you have not previously deployed the Metaflow stack in AWS, please follow these steps to download and deploy the CloudFormation template from the console:
-- Download the template [HERE](https://github.com/outerbounds/metaflow-tools/blob/master/aws/cloudformation/metaflow-cfn-template.yml)
+- Download the template [HERE](https://github.com/outerbounds/metaflow-tools/blob/master/aws/cloudformation/metaflow-cfn-template.yml), or use the on in this repository [here](./cfn/metaflow_cfn_template.yaml)
 - Open the AWS console, and search for "CloudFormation"
 - Choose "Create Stack" -> "With new resources (standard)"
 - Under "Prepare template" select "Template is ready"
@@ -18,9 +18,9 @@ If you have not previously deployed the Metaflow stack in AWS, please follow the
 - Click "Next" through the subsequent screens, then "Submit" to begin stack creation
 - When the stack has been deployed, go to the `Outputs` tab. This tab shows the values that you will need when configuring Metaflow on your instance in subsequent steps
 
-After the CloudFormation stack completes its build, you can either run `metaflow configure aws` and follow the interactive prompts, or you can run [this script](./cfn/download_step_functions.py) and pass it the name you gave the stack as follows to automatically configure Metaflow:
+After the CloudFormation stack completes its build, you can either run `metaflow configure aws` and follow the interactive prompts, or you can run [this script](./cfn/configure_metaflow.py) and pass it the name you gave the stack as follows to automatically configure Metaflow:
 ```bash
-python cfn/download_step_functions.py -s <YOUR-STACK-NAME>
+python cfn/configure_metaflow.py -s <YOUR-STACK-NAME>
 ```
 
 Please note that this default Metaflow stack will create a Batch job queue that is not enabled for Trainium / trn1 instances. The Trainium-enabled job queue will created in the next section, and it is the queue that should be specified when launching Trainium-based training jobs. 
