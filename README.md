@@ -11,9 +11,7 @@ https://github.com/outerbounds/metaflow-trainium/assets/40632488/850e474e-098c-4
 https://github.com/outerbounds/metaflow-trainium/assets/40632488/c89f8600-1038-4353-978a-2a347c3a2c49
 
 ## Step 3: Run experiments
-Once the required resources have been created and configured, please try to run the included [allreduce example](./allreduce-trn) as a basic test of the Metaflow/Trainium/Batch setup. When the allreduce example is successfully running, you can then proceed to the more 
-
-interesting examples such as [Llama2-7b pretraining](./llama2-7b-pretrain-trn).
+Once the required resources have been created and configured, please try to run the included [allreduce example](./allreduce-trn) as a basic test of the Metaflow/Trainium/Batch setup. When the allreduce example is successfully running, you can then proceed to the more realistic workflows such as [Llama2-7b pretraining](./llama2-7b-pretrain-trn).
 
 AWS Trainium is currently supported in us-east-1, us-east-2, and us-west-2. Please make sure that you are working in one of these supported regions.
 
