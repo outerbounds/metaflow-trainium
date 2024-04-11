@@ -1,6 +1,6 @@
 # Metaflow-Trainium Examples
 <!-- <a href="..."> -->
-<img style="display: block; float: left; max-width: 20%; height: auto; margin: auto; float: none!important;" src="static/cover.png"/>
+<img style="display: block; float: left; max-width: 20%; height: auto; margin: auto; float: none!important;" src="static/cover.jpg"/>
 <!-- </a> -->
 
 This repository contains examples that demonstrate how to use [Metaflow](https://metaflow.org/) to define and run machine learning training jobs with [AWS Trainium](https://aws.amazon.com/machine-learning/trainium/). The training jobs are executed as batch jobs running on AWS EC2 trn1 instances in [AWS Batch](https://aws.amazon.com/batch/).
