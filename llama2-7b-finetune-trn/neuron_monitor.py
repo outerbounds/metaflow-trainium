@@ -168,6 +168,7 @@ class NeuronMonitor:
         self._interval = interval
         self._duration = duration
         self._finished = False
+        self.hardware_info = None
 
     @property
     def _current_file(self):
@@ -223,9 +224,12 @@ class NeuronMonitor:
         if self._poller.poll(1):
             proc = AsyncProcessManager.get(self._current_process.uuid)[0]
             try:
+                proc = AsyncProcessManager.get(self._current_process.uuid)[0]
                 if proc.stdout is not None:
                     line = proc.stdout.readline()
                     jtmp = json.loads(line.decode())
+                    if not self.hardware_info and "neuron_hardware_info" in jtmp:
+                        self.hardware_info = jtmp["neuron_hardware_info"]
                     time = datetime.now().strftime(TS_FORMAT)
                     vals = {}
                     for rt_data in jtmp["neuron_runtime_data"]:
@@ -293,17 +297,17 @@ class NeuronMonitor:
             self._current_readings, json.loads(json.dumps(self._past_readings))
         )
 
-    def read_hardware_info(self):
-        """
-        Will read the hardware info from the monitor and return it as a dictionary.
-        It should run before meaningful data is available from the monitor readings.
-        """
-        if self._poller.poll(1):
-            proc = AsyncProcessManager.get(self._current_process.uuid)[0]
-            line = proc.stdout.readline()
-            data = json.loads(line)
-            if "neuron_hardware_info" in data:
-                return data["neuron_hardware_info"]
+    # def read_hardware_info(self):
+    #     """
+    #     Will read the hardware info from the monitor and return it as a dictionary.
+    #     It should run before meaningful data is available from the monitor readings.
+    #     """
+    #     if self._poller.poll(1):
+    #         proc = AsyncProcessManager.get(self._current_process.uuid)[0]
+    #         line = proc.stdout.readline()
+    #         data = json.loads(line)
+    #         if "neuron_hardware_info" in data:
+    #             return data["neuron_hardware_info"]
 
     def _update_past_readings(self):
         if self._current_readings is None:
@@ -378,20 +382,24 @@ class NeuronProfiler:
             interval=interval, duration=monitor_batch_duration
         )
         self._monitor_thread = threading.Thread(
-            target=self._monitor._monitor_update_thread,  # daemon=True
+            target=self._monitor._monitor_update_thread,
         )
         self._monitor_thread.start()
         self._interval = interval
 
         time.sleep(1)
-        self.hardware_info_dict = self._monitor.read_hardware_info()
-        self.devices = [
-            str(i)
-            for i in range(
-                int(self.hardware_info_dict["neuron_device_count"])
-                * int(self.hardware_info_dict["neuroncore_per_device_count"])
-            )
-        ]
+        i = 0
+        while True:
+            if self._monitor.hardware_info:
+                self.hardware_info_dict = self._monitor.hardware_info
+                self.devices = [
+                    str(i)
+                    for i in range(
+                        int(self.hardware_info_dict["neuron_device_count"])
+                        * int(self.hardware_info_dict["neuroncore_per_device_count"])
+                    )
+                ]
+                break
 
         self._card_comps = {"max_utilization": {}, "charts": {}, "reading_duration": {}}
         self._card_created = False
