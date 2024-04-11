@@ -15,6 +15,14 @@ When satisfied, run `python config.py` and it will generate a `.yaml` file calle
 python flow.py run --config-file config.yaml
 ```
 
+### Monitoring
+To observe results, you can either deploy the [Metaflow UI](https://github.com/Netflix/metaflow-ui), or use the local card server, which is built-in.
+To run the local server, type the following command in the same virtual environment where the `flow.py` is running:
+```
+python flow.py card server 
+```
+The open https://localhost:8342 and you can observe the real-time updates from your multi-node batch job.
+
 ### Resuming from a checkpoint
 At the end of each run, the workflow in `flow.py` writes the latest checkpoint to the `model_store` contained in S3. 
 You can change how these results are indexed by reading the `flow.py` code if you wish. 
