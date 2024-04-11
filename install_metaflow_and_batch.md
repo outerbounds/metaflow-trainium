@@ -18,10 +18,15 @@ If you have not previously deployed the Metaflow stack in AWS, please follow the
 - Click "Next" through the subsequent screens, then "Submit" to begin stack creation
 - When the stack has been deployed, go to the `Outputs` tab. This tab shows the values that you will need when configuring Metaflow on your instance in subsequent steps
 
+After the CloudFormation stack completes its build, you can either run `metaflow configure aws` and follow the interactive prompts, or you can run [this script](./cfn/download_step_functions.py) and pass it the name you gave the stack as follows to automatically configure Metaflow:
+```bash
+python cfn/download_step_functions.py -s <YOUR-STACK-NAME>
+```
+
 Please note that this default Metaflow stack will create a Batch job queue that is not enabled for Trainium / trn1 instances. The Trainium-enabled job queue will created in the next section, and it is the queue that should be specified when launching Trainium-based training jobs. 
 
 ### [Optional] Deploy the Metaflow UI
-The [Metaflow GUI](https://github.com/Netflix/metaflow-ui) is a separate tool for monitoring Metaflow workflow tasks in real-time.
+The [Metaflow UI](https://github.com/Netflix/metaflow-ui) is a separate tool for monitoring Metaflow workflow tasks in real-time.
 
 ## 🛠️ Create AWS Batch resources for Trainium
 Before you can run AWS Trainium jobs in AWS Batch, you first need to create a VPC with Trainium-supported subnets, EC2 launch template, AWS Batch compute environment, and AWS Batch job queue. If you have not yet created these resources, you can use the provided Cloudformation template to quickly deploy a basic setup to get you started.
