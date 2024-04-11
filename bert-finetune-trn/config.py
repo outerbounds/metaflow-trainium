@@ -75,7 +75,6 @@ class CachingEnvironmentConfig:
 training_env_config = {
     "git+https://github.com/huggingface/optimum-neuron.git": "",
     # d31985678f800cdb9b8a942d3f8a69d7a9e4787c
-
     "evaluate": "0.4.1",
     "regex": "2023.12.25",
     # "tensorboard": "2.15.1",

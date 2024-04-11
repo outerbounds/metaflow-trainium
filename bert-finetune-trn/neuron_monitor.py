@@ -234,7 +234,9 @@ class NeuronMonitor:
                     vals = {}
                     for rt_data in jtmp["neuron_runtime_data"]:
                         # core utilization
-                        d = rt_data["report"]["neuroncore_counters"]["neuroncores_in_use"]
+                        d = rt_data["report"]["neuroncore_counters"][
+                            "neuroncores_in_use"
+                        ]
                         for k in d.keys():
                             vals[k] = vals.get(k, 0) + d[k]["neuroncore_utilization"]
                             if k not in devdata:
@@ -246,9 +248,9 @@ class NeuronMonitor:
                                 }
                             devdata[k]["neuron_utilization"].append(vals[k])
                         # memory utilization
-                        d = rt_data["report"]["memory_used"]["neuron_runtime_used_bytes"][
-                            "usage_breakdown"
-                        ]["neuroncore_memory_usage"]
+                        d = rt_data["report"]["memory_used"][
+                            "neuron_runtime_used_bytes"
+                        ]["usage_breakdown"]["neuroncore_memory_usage"]
                         for k in d.keys():
                             devdata[k]["memory_used"].append(sum(d[k].values()))
                             devdata[k]["memory_total"].append(
@@ -258,7 +260,7 @@ class NeuronMonitor:
                         for k in d.keys():
                             devdata[k]["timestamp"].append(time)
             except AttributeError as e:
-                pass # Ignore the error, it means there is no process running to read from
+                pass  # Ignore the error, it means there is no process running to read from
         return devdata
 
     def _update_readings(self):
@@ -348,7 +350,8 @@ def _update_utilization(results, md_dict):
                 "%2.1f%%" % max(map(float, data["neuron_utilization"]))
             )
             md_dict[device]["memory"].update(
-                "%dMB" % max(map(lambda x: float(x) / (1024 * 1024), data["memory_used"]))
+                "%dMB"
+                % max(map(lambda x: float(x) / (1024 * 1024), data["memory_used"]))
             )
 
 
@@ -509,7 +512,6 @@ class NeuronProfiler:
 
 
 class neuron_monitor:
-
     def __init__(
         self,
         include_artifacts=True,

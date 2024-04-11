@@ -93,27 +93,44 @@ class Llama2Finetune(FlowSpec, ConfigBase):
 
         # convert deepspeed config to json
         model_arch_config = OmegaConf.to_container(self.config.deepspeed)
-        ds_config_base64 = base64.urlsafe_b64encode(json.dumps(model_arch_config).encode()).decode()
+        ds_config_base64 = base64.urlsafe_b64encode(
+            json.dumps(model_arch_config).encode()
+        ).decode()
 
         # Train the model.
         import subprocess
+
         cmd = [
             "torchrun",
-            "--nproc_per_node", str(environment_config.tune_llama2_step.batch_job.n_gpu),
+            "--nproc_per_node",
+            str(environment_config.tune_llama2_step.batch_job.n_gpu),
             "run_clm.py",
-            "--model_id", self.config.model_store.hf_model_name,
-            "--dataset_path", data_dir,
-            "--pretrained_model_cache", "pretrained_model_cache",
-            "--bf16", str(self.config.training.bf16),
-            "--learning_rate", str(self.config.training.learning_rate),
-            "--output_dir", checkpoint_dir,
-            "--overwrite_output_dir", str(self.config.training.overwrite_output_dir),
-            "--per_device_train_batch_size", str(self.config.training.per_device_train_batch_size),
-            "--gradient_checkpointing", str(self.config.training.gradient_checkpointing),
-            "--num_train_epochs", str(self.config.training.num_train_epochs),
-            "--logging_steps", str(self.config.training.logging_steps),
-            "--gradient_accumulation_steps", str(self.config.training.gradient_accumulation_steps),
-            "--deepspeed", ds_config_base64
+            "--model_id",
+            self.config.model_store.hf_model_name,
+            "--dataset_path",
+            data_dir,
+            "--pretrained_model_cache",
+            "pretrained_model_cache",
+            "--bf16",
+            str(self.config.training.bf16),
+            "--learning_rate",
+            str(self.config.training.learning_rate),
+            "--output_dir",
+            checkpoint_dir,
+            "--overwrite_output_dir",
+            str(self.config.training.overwrite_output_dir),
+            "--per_device_train_batch_size",
+            str(self.config.training.per_device_train_batch_size),
+            "--gradient_checkpointing",
+            str(self.config.training.gradient_checkpointing),
+            "--num_train_epochs",
+            str(self.config.training.num_train_epochs),
+            "--logging_steps",
+            str(self.config.training.logging_steps),
+            "--gradient_accumulation_steps",
+            str(self.config.training.gradient_accumulation_steps),
+            "--deepspeed",
+            ds_config_base64,
         ]
 
         # print(cmd)

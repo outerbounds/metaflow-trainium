@@ -10,7 +10,6 @@ from config import DataStoreConfig, TokenizerStoreConfig, ModelStoreConfig
 
 
 class BaseStore:
-
     @classmethod
     def from_path(cls, base_prefix):
         # return cls(os.path.join(DATATOOLS_S3ROOT, base_prefix))
@@ -107,7 +106,6 @@ class BaseStore:
 
 
 class DataStore(BaseStore):
-
     @classmethod
     def from_config(cls, config: DataStoreConfig):
         return cls(os.path.join(DATATOOLS_S3ROOT, config.s3_prefix))
@@ -139,7 +137,12 @@ class DataStore(BaseStore):
         tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
 
         def tokenize(batch):
-            return tokenizer( batch["text"], padding="max_length", truncation=True, return_tensors="pt" )
+            return tokenizer(
+                batch["text"],
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+            )
 
         # Tokenize dataset
         dataset = dataset.rename_column("label", "labels")  # to match Trainer
@@ -147,19 +150,21 @@ class DataStore(BaseStore):
         tokenized_dataset = tokenized_dataset.with_format("torch")
 
         # save dataset to disk
-        tokenized_dataset["train"].save_to_disk(os.path.join(self.local_save_path, "train"))
-        tokenized_dataset["test"].save_to_disk(os.path.join(self.local_save_path, "eval"))
+        tokenized_dataset["train"].save_to_disk(
+            os.path.join(self.local_save_path, "train")
+        )
+        tokenized_dataset["test"].save_to_disk(
+            os.path.join(self.local_save_path, "eval")
+        )
 
 
 class TokenizerStore(BaseStore):
-
     def __init__(self, store_root) -> None:
         # store_root is a S3 path to where all files for the store contents will be loaded and saved
         self._store_root = store_root
 
 
 class ModelStore(BaseStore):
-
     def __init__(self, store_root) -> None:
         # store_root is a S3 path to where all files for the store contents will be loaded and saved
         self._store_root = store_root

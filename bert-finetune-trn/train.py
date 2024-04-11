@@ -30,16 +30,49 @@ def parse_args():
     """Parse the arguments."""
     parser = argparse.ArgumentParser()
     # add model id and dataset path argument
-    parser.add_argument("--model_id", type=str, default="bert-large-uncased", help="Model id to use for training.")
-    parser.add_argument("--dataset_path", type=str, default="dataset", help="Path to the already processed dataset.")
-    parser.add_argument("--output_dir", type=str, default=None, help="Output directory for the model.")
+    parser.add_argument(
+        "--model_id",
+        type=str,
+        default="bert-large-uncased",
+        help="Model id to use for training.",
+    )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default="dataset",
+        help="Path to the already processed dataset.",
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default=None, help="Output directory for the model."
+    )
     # add training hyperparameters for epochs, batch size, learning rate, and seed
-    parser.add_argument("--epochs", type=int, default=3, help="Number of epochs to train for.")
-    parser.add_argument("--tensor_parallel_size", type=int, default=1, help="Number of tensor parallel groups.")
-    parser.add_argument("--per_device_train_batch_size", type=int, default=8, help="Batch size to use for training.")
-    parser.add_argument("--per_device_eval_batch_size", type=int, default=8, help="Batch size to use for testing.")
-    parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate to use for training.")
-    parser.add_argument("--seed", type=int, default=42, help="Seed to use for training.")
+    parser.add_argument(
+        "--epochs", type=int, default=3, help="Number of epochs to train for."
+    )
+    parser.add_argument(
+        "--tensor_parallel_size",
+        type=int,
+        default=1,
+        help="Number of tensor parallel groups.",
+    )
+    parser.add_argument(
+        "--per_device_train_batch_size",
+        type=int,
+        default=8,
+        help="Batch size to use for training.",
+    )
+    parser.add_argument(
+        "--per_device_eval_batch_size",
+        type=int,
+        default=8,
+        help="Batch size to use for testing.",
+    )
+    parser.add_argument(
+        "--lr", type=float, default=5e-5, help="Learning rate to use for training."
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Seed to use for training."
+    )
     parser.add_argument(
         "--bf16",
         type=bool,
@@ -70,7 +103,9 @@ metric = evaluate.load("f1")
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
     predictions = np.argmax(predictions, axis=1)
-    return metric.compute(predictions=predictions, references=labels, average="weighted")
+    return metric.compute(
+        predictions=predictions, references=labels, average="weighted"
+    )
 
 
 def training_function(args):
@@ -114,7 +149,7 @@ def training_function(args):
         logging_strategy="steps",
         logging_steps=10,
         # evaluation_strategy="epoch",
-        # save_strategy="epoch", 
+        # save_strategy="epoch",
         save_total_limit=2,
         # push to hub parameters
         # report_to="tensorboard"

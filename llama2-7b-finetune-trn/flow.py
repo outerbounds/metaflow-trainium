@@ -73,7 +73,6 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
     @torchrun
     @step
     def tune_llama2(self):
-
         def make_path(rel_path, make_dir=True, use_tmpfs=False):
             if use_tmpfs:
                 path = os.path.join(current.tempdir, rel_path)
@@ -98,10 +97,12 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
             model_store = self._get_model_store()
             model_store.download(
                 download_path=neuron_compiler_cache_dir,
-                store_key=self.config.model_store.s3_neuron_compiler_cache_key
+                store_key=self.config.model_store.s3_neuron_compiler_cache_key,
             )
         except ValueError as e:
-            print('Compiler cache is empty, optimum trainer will tell neuron-cc to compile the model. It might take a while...')
+            print(
+                "Compiler cache is empty, optimum trainer will tell neuron-cc to compile the model. It might take a while..."
+            )
 
         entrypoint_args = {
             "model_id": self.config.model_store.hf_model_name,
@@ -121,9 +122,9 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
 
         # Train the model.
         current.torch.run(
-            torchrun_args={'master_port': '41000'},
+            torchrun_args={"master_port": "41000"},
             entrypoint="run_clm.py",
-            entrypoint_args=entrypoint_args
+            entrypoint_args=entrypoint_args,
         )
 
         # Upload tensor parallel shards.
@@ -140,16 +141,16 @@ class TrainiumLlama2Finetune(FlowSpec, ConfigBase):
         # Upload the neuron compiler cache.
         # Cache contents will be downloaded in future runs to bypass the HF hub cache mechanism and get the training started faster.
         import subprocess
+
         subprocess.run(["neuron_parallel_compile", "--command", "clear-locks"])
         for subdir in os.listdir(neuron_compiler_cache_dir):
-            if subdir in ['lock']:
+            if subdir in ["lock"]:
                 continue
             model_store.upload(
                 local_path=os.path.join(neuron_compiler_cache_dir, subdir),
                 store_key=os.path.join(
-                    self.config.model_store.s3_neuron_compiler_cache_key,
-                    subdir
-                )
+                    self.config.model_store.s3_neuron_compiler_cache_key, subdir
+                ),
             )
 
         self.next(self.join)

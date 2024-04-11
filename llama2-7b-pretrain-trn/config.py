@@ -155,14 +155,13 @@ class BatchJobConfig:
     image: str = "public.ecr.aws/outerbounds/trainium:llama2"
     job_queue: str = "trn1-batch-trn1_32xl_batch_job_queue"
 
+
 @dataclass
 class TrainLlama2EnvConfig:
     packages: Dict[str, str] = field(default_factory=lambda: training_env_config)
     env_vars: Dict[str, str] = field(default_factory=lambda: env_vars_config)
     batch_job: BatchJobConfig = field(default_factory=BatchJobConfig)
-    continue_from_checkpoint_instructions: str = (
-        "To continue from a checkpoint, specify the checkpoint name in the --checkpoint parameter."
-    )
+    continue_from_checkpoint_instructions: str = "To continue from a checkpoint, specify the checkpoint name in the --checkpoint parameter."
 
 
 @dataclass

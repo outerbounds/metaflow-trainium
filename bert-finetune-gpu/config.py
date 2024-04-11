@@ -99,9 +99,7 @@ training_env_config = {
 }
 
 
-env_vars_config = {
-    "NCCL_SOCKET_IFNAME": "eth0"
-}
+env_vars_config = {"NCCL_SOCKET_IFNAME": "eth0"}
 
 
 @dataclass

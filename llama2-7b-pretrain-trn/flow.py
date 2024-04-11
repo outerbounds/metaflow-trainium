@@ -60,7 +60,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
                 sys.exit(store.download_instructions)
         self.next(self.cache_dataset)
 
-    def _write_config_as_json(self, relpath=''):
+    def _write_config_as_json(self, relpath=""):
         from omegaconf import OmegaConf
         import json
 
@@ -77,7 +77,9 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
             self._write_config_as_json()
             if not os.path.exists(self.config.tokenizer_store.local_path):
                 tokenizer_store = self._get_tokenizer_store()
-                tokenizer_store.download(download_path=self.config.tokenizer_store.local_path)
+                tokenizer_store.download(
+                    download_path=self.config.tokenizer_store.local_path
+                )
             data_store.download_from_huggingface(self.config.data_store)
             data_store.upload(self.config.data_store.local_path)
         self.next(
@@ -135,9 +137,9 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
                     current.parallel.node_index,
                 ),
             )
-            resume_checkpoint_arg["resume_ckpt"] = (
-                None  # NOTE: value None tells current.torch.run to use store_true style command line arg
-            )
+            resume_checkpoint_arg[
+                "resume_ckpt"
+            ] = None  # NOTE: value None tells current.torch.run to use store_true style command line arg
 
         # Write config.json used by transformers model. If desired, you could alternatively package a hard-coded config.json in the Docker image.
         self._write_config_as_json(relpath=model_path)
@@ -183,7 +185,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
         # Run llama2 pretraining. @torchrun exposes the current.torch.run action, which constructs the distributed training pieces of the command.
         current.torch.run(
             torchrun_args={
-                'master_port': "41000",  # NOTE: 41000 is hardcoded in reserved ports in the Dockerfile.
+                "master_port": "41000",  # NOTE: 41000 is hardcoded in reserved ports in the Dockerfile.
             },
             entrypoint="tp_zero1_llama2_7b_hf_pretrain.py",
             entrypoint_args=entrypoint_args,
@@ -213,6 +215,7 @@ class TrainiumLlama2Pretrain(FlowSpec, ConfigBase):
 
             # Store metrics file.
             import json
+
             self.metrics_json = json.load(open(metrics_file))
 
         self.next(self.join)

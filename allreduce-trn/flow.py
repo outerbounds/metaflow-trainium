@@ -5,7 +5,6 @@ N_TRAINIUM = 16
 
 
 class TrainiumAllReduce(FlowSpec):
-
     @step
     def start(self):
         print("Starting...")

@@ -21,7 +21,6 @@ When downloading and using the Llama2 Tokenizer and models, you are responsible 
 
 
 class BaseStore:
-
     @classmethod
     def from_path(cls, base_prefix):
         # return cls(os.path.join(DATATOOLS_S3ROOT, base_prefix))
@@ -118,7 +117,6 @@ class BaseStore:
 
 
 class DataStore(BaseStore):
-
     @classmethod
     def from_config(cls, config: DataStoreConfig):
         return cls(os.path.join(DATATOOLS_S3ROOT, config.s3_prefix))
@@ -236,14 +234,12 @@ class DataStore(BaseStore):
 
 
 class TokenizerStore(BaseStore):
-
     def __init__(self, store_root) -> None:
         # store_root is a S3 path to where all files for the store contents will be loaded and saved
         self._store_root = store_root
 
 
 class ModelStore(BaseStore):
-
     def __init__(self, store_root) -> None:
         # store_root is a S3 path to where all files for the store contents will be loaded and saved
         self._store_root = store_root

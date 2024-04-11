@@ -33,7 +33,10 @@ class BERTFinetune(FlowSpec, ConfigBase):
         tokenizer_store = self._get_tokenizer_store()
         if not tokenizer_store.already_exists():
             from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(self.config.model_store.hf_model_name)
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.config.model_store.hf_model_name
+            )
             tokenizer.save_pretrained(self.config.tokenizer_store.local_path)
             tokenizer_store.upload(self.config.tokenizer_store.local_path)
         self.next(self.cache_dataset)
@@ -81,7 +84,9 @@ class BERTFinetune(FlowSpec, ConfigBase):
             return path
 
         data_dir = make_path(self.config.data_store.local_path)
-        checkpoint_dir = make_path(self.config.model_store.local_checkpoints_path, use_tmpfs=False)
+        checkpoint_dir = make_path(
+            self.config.model_store.local_checkpoints_path, use_tmpfs=False
+        )
         model_path = make_path(self.config.model_store.local_weights_path)
 
         # Download tokenized data.
@@ -97,18 +102,22 @@ class BERTFinetune(FlowSpec, ConfigBase):
         entrypoint_args = {
             "model_id": self.config.model_store.hf_model_name,
             "dataset_path": data_dir,
-            "pretrained_model_cache": os.path.join(current.tempdir, "pretrained_model_cache"),
+            "pretrained_model_cache": os.path.join(
+                current.tempdir, "pretrained_model_cache"
+            ),
             "bf16": self.config.training.bf16,
             "lr": self.config.training.learning_rate,
             "output_dir": checkpoint_dir,
             "per_device_train_batch_size": self.config.training.per_device_train_batch_size,
             "epochs": self.config.training.epochs,
-            "logging_steps": self.config.training.logging_steps, 
-            "deepspeed": deepspeed_config_file
+            "logging_steps": self.config.training.logging_steps,
+            "deepspeed": deepspeed_config_file,
         }
- 
+
         # Train the model.
-        current.torch.run(entrypoint="train.py", entrypoint_args=entrypoint_args, master_port="41000")
+        current.torch.run(
+            entrypoint="train.py", entrypoint_args=entrypoint_args, master_port="41000"
+        )
         model_store = self._get_model_store()
         model_store.upload(
             local_path=checkpoint_dir,
